@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { TodoListsModule } from './todo_lists/todo_lists.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TodoList } from './todo_lists/todo_list.entity';
+import { TodoItem } from './todo_items/todo_item.entity';
 
 @Module({
   imports: [
@@ -15,7 +16,7 @@ import { TodoList } from './todo_lists/todo_list.entity';
       username: process.env.DB_USERNAME,
       password: process.env.DB_PASSWORD,
       database: process.env.DB_DATABASE,
-      entities: [TodoList],
+      entities: [TodoList, TodoItem],
       synchronize: true,
       logging: true,
     }),
