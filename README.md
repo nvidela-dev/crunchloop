@@ -37,12 +37,16 @@ at http://localhost:3000/api. Routes are under `/api/todolists`.
 API will sync with. Routes are at the root (`/todolists`). See
 [`external-api/README.md`](external-api/README.md).
 
-## Tests
+## Tests & linting
 
 ```bash
 make test      # api unit tests (in a throwaway container)
-make lint      # api lint
+make lint      # lint the TypeScript projects (api + frontend)
 ```
+
+The TypeScript projects (`api`, `frontend`) lint with a shared baseline:
+`eslint:recommended` + `@typescript-eslint/recommended`. (`external-api` is an
+unmodified black box and is intentionally not linted.)
 
 ## AI transcripts
 
