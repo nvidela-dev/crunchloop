@@ -1,9 +1,14 @@
 version: '3.8'
 services:
   app:
-    image: mcr.microsoft.com/devcontainers/typescript-node:0-18     
+    image: mcr.microsoft.com/devcontainers/typescript-node:20
+    working_dir: /workspaces/nestjs-interview
+    # Install deps inside the container, then run the API in watch mode.
+    command: sh -c "npm install && npm run start:dev"
     volumes:
       - .:/workspaces/nestjs-interview
+      # Keep the container's node_modules isolated from the host's.
+      - /workspaces/nestjs-interview/node_modules
     ports:
       - "3000:3000"
     environment:
@@ -13,7 +18,8 @@ services:
       - DB_PASSWORD=postgres
       - DB_DATABASE=nestjs_db
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     networks:
       - nestjs-network
 
@@ -27,6 +33,11 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d nestjs_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     networks:
       - nestjs-network
 

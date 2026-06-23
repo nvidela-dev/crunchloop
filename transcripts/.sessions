@@ -1,0 +1,5 @@
+# Allow-listed Claude Code session IDs that form this project's development log.
+# The log starts here (demo development); earlier interview/strategy sessions are
+# intentionally excluded. `make transcript` appends the active session and copies
+# each listed session's .jsonl into this folder.
+f8beaed5-c303-4674-a45a-a9d74bedc27d

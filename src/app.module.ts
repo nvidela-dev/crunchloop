@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TodoListsModule } from './todo_lists/todo_lists.module';
+import { TodoItemsModule } from './todo_items/todo_items.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TodoList } from './todo_lists/todo_list.entity';
 import { TodoItem } from './todo_items/todo_item.entity';
@@ -9,6 +10,7 @@ import { TodoItem } from './todo_items/todo_item.entity';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     TodoListsModule,
+    TodoItemsModule,
     TypeOrmModule.forRoot({
       type: 'postgres',
       host: process.env.DB_HOST,

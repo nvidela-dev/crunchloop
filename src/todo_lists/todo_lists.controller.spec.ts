@@ -59,7 +59,7 @@ describe('TodoListsController', () => {
     it('should return a single todo list by id', async () => {
       const mockTodoList = { id: 1, name: 'Shopping List' };
       todoListRepositoryMock.findOneBy.mockResolvedValue(mockTodoList);
-      const result = await todoListsController.show({ todoListId: 1 });
+      const result = await todoListsController.show(1);
       expect(result).toEqual(mockTodoList);
     });
   });
@@ -87,10 +87,7 @@ describe('TodoListsController', () => {
       todoListRepositoryMock.findOneBy.mockResolvedValue(existingTodoList);
       todoListRepositoryMock.save.mockResolvedValue(updatedTodoList);
 
-      const result = await todoListsController.update(
-        { todoListId: '1' },
-        updateDto,
-      );
+      const result = await todoListsController.update(1, updateDto);
 
       expect(result).toEqual(updatedTodoList);
     });
@@ -99,7 +96,7 @@ describe('TodoListsController', () => {
   describe('delete', () => {
     it('should delete a todo list', async () => {
       todoListRepositoryMock.delete.mockResolvedValue({ affected: 1 });
-      await todoListsController.delete({ todoListId: 1 });
+      await todoListsController.delete(1);
       expect(todoListRepositoryMock.delete).toHaveBeenCalledWith(1);
     });
   });

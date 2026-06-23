@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseIntPipe,
   Post,
   Put,
 } from '@nestjs/common';
@@ -36,8 +37,10 @@ export class TodoListsController {
   @ApiParam({ name: 'todoListId', type: Number })
   @ApiOkResponse({ type: TodoListEntity })
   @Get('/:todoListId')
-  show(@Param() param: { todoListId: number }): Promise<TodoList | null> {
-    return this.todoListsService.get(param.todoListId);
+  show(
+    @Param('todoListId', ParseIntPipe) todoListId: number,
+  ): Promise<TodoList | null> {
+    return this.todoListsService.get(todoListId);
   }
 
   @ApiOperation({ summary: 'Create a todo list' })
@@ -52,17 +55,17 @@ export class TodoListsController {
   @ApiOkResponse({ type: TodoListEntity })
   @Put('/:todoListId')
   update(
-    @Param() param: { todoListId: string },
+    @Param('todoListId', ParseIntPipe) todoListId: number,
     @Body() dto: UpdateTodoListDto,
   ): Promise<TodoList> {
-    return this.todoListsService.update(Number(param.todoListId), dto);
+    return this.todoListsService.update(todoListId, dto);
   }
 
   @ApiOperation({ summary: 'Delete a todo list' })
   @ApiParam({ name: 'todoListId', type: Number })
   @ApiOkResponse({ description: 'Todo list deleted' })
   @Delete('/:todoListId')
-  delete(@Param() param: { todoListId: number }): Promise<void> {
-    return this.todoListsService.delete(param.todoListId);
+  delete(@Param('todoListId', ParseIntPipe) todoListId: number): Promise<void> {
+    return this.todoListsService.delete(todoListId);
   }
 }
