@@ -78,6 +78,19 @@ test: ## Run the api unit tests in a throwaway container
 lint: ## Lint the api in a throwaway container
 	$(COMPOSE) run --rm --no-deps api npm run lint
 
+# --- Seeding ---------------------------------------------------------------
+
+.PHONY: seed
+seed: seed-local seed-external ## Seed both APIs with demo data (stack must be up)
+
+.PHONY: seed-local
+seed-local: ## Seed the local API's Postgres
+	$(COMPOSE) exec -T api npm run seed
+
+.PHONY: seed-external
+seed-external: ## Seed the external API over HTTP (no changes to its code)
+	./scripts/seed-external.sh
+
 # --- Conversation transcripts ---------------------------------------------
 
 .PHONY: transcript

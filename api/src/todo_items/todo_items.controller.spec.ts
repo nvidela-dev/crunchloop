@@ -16,6 +16,7 @@ describe('TodoItemsController', () => {
       findOneBy: jest.fn(),
       save: jest.fn(),
       delete: jest.fn(),
+      softDelete: jest.fn(),
       create: jest.fn(),
     };
 
@@ -141,12 +142,12 @@ describe('TodoItemsController', () => {
   });
 
   describe('delete', () => {
-    it('should delete an item scoped to its list', async () => {
-      todoItemRepositoryMock.delete.mockResolvedValue({ affected: 1 });
+    it('should soft-delete an item scoped to its list', async () => {
+      todoItemRepositoryMock.softDelete.mockResolvedValue({ affected: 1 });
 
       await todoItemsController.delete(1, 1);
 
-      expect(todoItemRepositoryMock.delete).toHaveBeenCalledWith({
+      expect(todoItemRepositoryMock.softDelete).toHaveBeenCalledWith({
         id: 1,
         todoListId: 1,
       });

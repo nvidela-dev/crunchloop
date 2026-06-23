@@ -4,4 +4,7 @@ export interface TodoItem {
   description: string;
   completed: boolean;
   todoListId: number;
+  externalId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
