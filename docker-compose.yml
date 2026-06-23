@@ -1,49 +1,83 @@
-version: '3.8'
-services:
-  app:
-    image: mcr.microsoft.com/devcontainers/typescript-node:20
-    working_dir: /workspaces/nestjs-interview
-    # Install deps inside the container, then run the API in watch mode.
-    command: sh -c "npm install && npm run start:dev"
-    volumes:
-      - .:/workspaces/nestjs-interview
-      # Keep the container's node_modules isolated from the host's.
-      - /workspaces/nestjs-interview/node_modules
-    ports:
-      - "3000:3000"
-    environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USERNAME=postgres
-      - DB_PASSWORD=postgres
-      - DB_DATABASE=nestjs_db
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - nestjs-network
+name: crunchloop
 
+# Three independent projects, three containers, one network.
+# Ports are predictable and overridable via the root .env (see .env.example):
+#   frontend     -> ${FRONTEND_PORT:-5173}
+#   api          -> ${API_PORT:-3000}
+#   external-api -> ${EXTERNAL_API_PORT:-4000}
+#   postgres     -> ${DB_PORT:-5432}
+
+services:
   postgres:
     image: postgres:17
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=nestjs_db
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_DATABASE:-nestjs_db}
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d nestjs_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_DATABASE:-nestjs_db}"]
       interval: 5s
       timeout: 5s
       retries: 5
-    networks:
-      - nestjs-network
+    networks: [crunchloop]
+
+  # Our NestJS Todo API
+  api:
+    build: ./api
+    environment:
+      - PORT=3000
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=${DB_USERNAME:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_DATABASE=${DB_DATABASE:-nestjs_db}
+    ports:
+      - "${API_PORT:-3000}:3000"
+    volumes:
+      - ./api:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [crunchloop]
+
+  # External Todo API (Express + SQLite)
+  external-api:
+    build: ./external-api
+    environment:
+      - PORT=4000
+    ports:
+      - "${EXTERNAL_API_PORT:-4000}:4000"
+    volumes:
+      - ./external-api:/app
+      - /app/node_modules
+      - external_data:/app/data
+    networks: [crunchloop]
+
+  # React + Vite frontend (dev server)
+  frontend:
+    build: ./frontend
+    environment:
+      # The browser reaches the APIs via the host-published ports.
+      - VITE_API_URL=http://localhost:${API_PORT:-3000}
+      - VITE_EXTERNAL_API_URL=http://localhost:${EXTERNAL_API_PORT:-4000}
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - api
+    networks: [crunchloop]
 
 networks:
-  nestjs-network:
+  crunchloop:
     driver: bridge
 
 volumes:
   postgres_data:
+  external_data:

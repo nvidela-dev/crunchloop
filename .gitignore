@@ -1,6 +1,23 @@
-# compiled output
-/dist
-/node_modules
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+dist/
+**/dist/
+coverage/
+**/coverage/
+/.nyc_output
+
+# Env files
+.env
+**/.env
+.env.local
+
+# External API local SQLite database
+external-api/data/*.sqlite
+external-api/data/*.sqlite-shm
+external-api/data/*.sqlite-wal
 
 # Logs
 logs
@@ -9,29 +26,11 @@ npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-lerna-debug.log*
 
-# OS
+# OS / editors
 .DS_Store
-
-# Env
-.env
-.env.local
-
-# Tests
-/coverage
-/.nyc_output
-
-# IDEs and editors
 /.idea
-.project
-.classpath
-.c9/
-*.launch
 .settings/
-*.sublime-workspace
-
-# IDE - VSCode
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
