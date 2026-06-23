@@ -75,8 +75,9 @@ test: ## Run the api unit tests in a throwaway container
 	$(COMPOSE) run --rm --no-deps api npm test
 
 .PHONY: lint
-lint: ## Lint the api in a throwaway container
+lint: ## Lint the TypeScript projects (api + frontend)
 	$(COMPOSE) run --rm --no-deps api npm run lint
+	$(COMPOSE) run --rm --no-deps frontend npm run lint
 
 # --- Seeding ---------------------------------------------------------------
 
