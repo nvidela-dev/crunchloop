@@ -16,6 +16,7 @@ describe('TodoListsController', () => {
       findOneBy: jest.fn(),
       save: jest.fn(),
       delete: jest.fn(),
+      softDelete: jest.fn(),
       create: jest.fn(),
     };
 
@@ -94,10 +95,10 @@ describe('TodoListsController', () => {
   });
 
   describe('delete', () => {
-    it('should delete a todo list', async () => {
-      todoListRepositoryMock.delete.mockResolvedValue({ affected: 1 });
+    it('should soft-delete a todo list', async () => {
+      todoListRepositoryMock.softDelete.mockResolvedValue({ affected: 1 });
       await todoListsController.delete(1);
-      expect(todoListRepositoryMock.delete).toHaveBeenCalledWith(1);
+      expect(todoListRepositoryMock.softDelete).toHaveBeenCalledWith(1);
     });
   });
 });

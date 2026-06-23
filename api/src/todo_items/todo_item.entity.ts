@@ -5,6 +5,9 @@ import {
   PrimaryGeneratedColumn,
   ManyToOne,
   JoinColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+  DeleteDateColumn,
 } from 'typeorm';
 import { TodoList } from '../todo_lists/todo_list.entity';
 
@@ -35,4 +38,25 @@ export class TodoItem {
   @ApiProperty({ example: 1 })
   @Column()
   todoListId: number;
+
+  // --- Sync metadata ---
+
+  // The external API's id for this item. Null until first pushed/pulled.
+  @ApiProperty({ example: 'c2f1…', nullable: true })
+  @Column({ type: 'varchar', nullable: true, unique: true })
+  externalId: string | null;
+
+  @ApiProperty()
+  @CreateDateColumn()
+  createdAt: Date;
+
+  // Stamped on every save() — drives last-write-wins change detection.
+  @ApiProperty()
+  @UpdateDateColumn()
+  updatedAt: Date;
+
+  // Soft-delete tombstone: rows with a non-null deletedAt are excluded from
+  // reads, but kept so the sync engine can propagate the delete.
+  @DeleteDateColumn()
+  deletedAt: Date | null;
 }

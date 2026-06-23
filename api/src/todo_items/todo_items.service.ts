@@ -41,7 +41,9 @@ export class TodoItemsService {
     } as TodoItem);
   }
 
+  // Soft delete: sets the deletedAt tombstone instead of removing the row, so
+  // the sync engine can propagate the deletion to the external API.
   async delete(todoListId: number, id: number): Promise<void> {
-    await this.todoItemRepository.delete({ id, todoListId });
+    await this.todoItemRepository.softDelete({ id, todoListId });
   }
 }
