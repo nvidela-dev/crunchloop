@@ -1,0 +1,16 @@
+{
+  "name": "crunch-external-todo-api",
+  "version": "1.0.0",
+  "description": "Minimal Express implementation of the Crunchloop external Todo API.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=22.5"
+  }
+}

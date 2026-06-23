@@ -1,97 +1,50 @@
-# nextjs-interview / TodoApi
+# Crunchloop Todo — three-service stack
 
-[![Open in Coder](https://dev.crunchloop.io/open-in-coder.svg)](https://dev.crunchloop.io/templates/fly-containers/workspace?param.Git%20Repository=git@github.com:crunchloop/nextjs-interview.git)
+This repository hosts **three independent projects** that run together as
+separate Docker containers, orchestrated by a single `docker-compose.yml` and a
+top-level `Makefile`.
 
-This is a simple Todo List API built in Nest JS and Typescript. This project is currently being used for Javascript/Typescript full-stack candidates.
+| Folder          | Project                          | Stack                    | URL                     |
+| --------------- | -------------------------------- | ------------------------ | ----------------------- |
+| `frontend/`     | Todo UI                          | React 19 + Vite          | http://localhost:5173   |
+| `api/`          | Local Todo API                   | NestJS 11 + TypeORM + PG | http://localhost:3000   |
+| `external-api/` | External Todo API                | Express + node:sqlite    | http://localhost:4000   |
+| —               | Postgres (for `api/`)            | postgres:17              | localhost:5432          |
 
-It exposes CRUD for **todo lists** and the **items** nested under them, backed by
-Postgres via TypeORM.
+Each project keeps its own structure, dependencies, and `Dockerfile`; they only
+share the compose network. Ports are predictable and overridable via a root
+`.env` (copy `.env.example`).
 
-## Data model
-
-- **TodoList** — `id`, `name`, and a one-to-many `items` relation.
-- **TodoItem** — `id`, `title`, `description`, `completed`, `todoListId`.
-  Items belong to a list via a `ManyToOne` relation with `onDelete: CASCADE`,
-  so deleting a list removes its items.
-
-## Endpoints
-
-| Method | Path                                       | Description          |
-| ------ | ------------------------------------------ | -------------------- |
-| GET    | `/api/todolists`                           | List todo lists      |
-| POST   | `/api/todolists`                           | Create a todo list   |
-| GET    | `/api/todolists/:todoListId`               | Get one todo list    |
-| PUT    | `/api/todolists/:todoListId`               | Update a todo list   |
-| DELETE | `/api/todolists/:todoListId`               | Delete a todo list   |
-| GET    | `/api/todolists/:todoListId/items`         | List items in a list |
-| POST   | `/api/todolists/:todoListId/items`         | Create an item       |
-| GET    | `/api/todolists/:todoListId/items/:itemId` | Get one item         |
-| PUT    | `/api/todolists/:todoListId/items/:itemId` | Update an item       |
-| DELETE | `/api/todolists/:todoListId/items/:itemId` | Delete an item       |
-
-Interactive Swagger docs are served at `http://localhost:3000/api`.
-
-## Running with Docker (recommended)
-
-The whole stack (API + Postgres) is dockerized. A `Makefile` wraps the common
-commands — run `make` to see them all.
+## Run everything
 
 ```bash
-# Build and start API + Postgres in the background
-$ make up
-
-# Tail logs
-$ make logs
-
-# Stop (keeps the database volume)
-$ make down
+make up        # build + start all containers
+make ps        # status
+make urls      # print the service URLs
+make logs      # tail all logs
+make down      # stop (keeps data)
+make clean     # stop + drop volumes (Postgres + SQLite)
 ```
 
-The API listens on `http://localhost:3000`.
+Start a single service with `make api`, `make external-api`, or `make frontend`.
 
-### Dev container
+## The APIs
 
-The repo ships a dev container (`.devcontainer/`). Open the folder in VS Code and
-choose **Reopen in Container**: it brings up Postgres, installs dependencies
-(`postCreateCommand`), and forwards ports `3000`/`5432`.
+**Local API (`api/`, port 3000)** — CRUD for todo lists and nested items, Swagger
+at http://localhost:3000/api. Routes are under `/api/todolists`.
 
-## Running locally (host Node)
+**External API (`external-api/`, port 4000)** — the external Todo API the local
+API will sync with. Routes are at the root (`/todolists`). See
+[`external-api/README.md`](external-api/README.md).
 
-Requires Node 20+. Point the app at a Postgres instance via `.env` (copy
-`.env.example`). You can start just the database with Docker:
+## Tests
 
 ```bash
-$ make install      # npm ci
-$ make db           # start Postgres only
-$ make dev          # nest start --watch
+make test      # api unit tests (in a throwaway container)
+make lint      # api lint
 ```
-
-## Test
-
-```bash
-$ make test         # unit tests
-$ make lint         # eslint --fix
-$ make check        # lint + build + test (what CI runs)
-```
-
-Check integration tests at: (https://github.com/crunchloop/interview-tests)
 
 ## AI transcripts
 
-This solution was built with AI assistance. The conversation transcripts are
-exported into [`transcripts/`](./transcripts) as `.jsonl`. Refresh the snapshot
-with:
-
-```bash
-$ make transcript
-```
-
-## Contact
-
-- Martín Fernández (mfernandez@crunchloop.io)
-
-## About Crunchloop
-
-![crunchloop](https://s3.amazonaws.com/crunchloop.io/logo-blue.png)
-
-We strongly believe in giving back :rocket:. Let's work together [`Get in touch`](https://crunchloop.io/#contact).
+The development conversation log lives in [`transcripts/`](transcripts) as
+`.jsonl`. Refresh it with `make transcript`.
