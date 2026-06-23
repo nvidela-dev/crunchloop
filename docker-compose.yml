@@ -35,6 +35,7 @@ services:
       - DB_USERNAME=${DB_USERNAME:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-postgres}
       - DB_DATABASE=${DB_DATABASE:-nestjs_db}
+      - EXTERNAL_API_URL=http://external-api:4000
     ports:
       - "${API_PORT:-3000}:3000"
     volumes:

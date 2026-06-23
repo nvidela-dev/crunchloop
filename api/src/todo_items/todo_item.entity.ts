@@ -10,6 +10,7 @@ import {
   DeleteDateColumn,
 } from 'typeorm';
 import { TodoList } from '../todo_lists/todo_list.entity';
+import { SyncStatus } from '../sync/sync-status.enum';
 
 @Entity()
 export class TodoItem {
@@ -45,6 +46,10 @@ export class TodoItem {
   @ApiProperty({ example: 'c2f1…', nullable: true })
   @Column({ type: 'varchar', nullable: true, unique: true })
   externalId: string | null;
+
+  @ApiProperty({ enum: SyncStatus, example: SyncStatus.Pending })
+  @Column({ type: 'enum', enum: SyncStatus, default: SyncStatus.Pending })
+  syncStatus: SyncStatus;
 
   @ApiProperty()
   @CreateDateColumn()
