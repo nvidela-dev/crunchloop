@@ -26,6 +26,7 @@ export interface SyncSummary {
 @Injectable()
 export class SyncService {
   private readonly logger = new Logger(SyncService.name);
+  private readonly scheduleEnabled = process.env.SYNC_CRON_ENABLED !== 'false';
   private running = false;
 
   constructor(
@@ -39,6 +40,9 @@ export class SyncService {
 
   @Cron(CronExpression.EVERY_30_SECONDS)
   async scheduledSync(): Promise<void> {
+    if (!this.scheduleEnabled) {
+      return;
+    }
     const summary = await this.run();
     this.logger.log(
       `sync: pulled=${summary.pulled} pushed=${summary.pushed} ` +
