@@ -9,12 +9,16 @@ export interface RemoteItemTarget {
   item: TodoItem;
 }
 
+export interface AdoptTarget {
+  local: TodoList;
+  remote: RemoteTodoList;
+}
+
 export interface SyncPlan {
   pullLists: RemoteTodoList[];
   pushLists: TodoList[];
+  adoptLists: AdoptTarget[];
   pushItems: RemoteItemTarget[];
-  syncedLists: TodoList[];
-  syncedItems: TodoItem[];
 }
 
 @Injectable()
@@ -25,53 +29,46 @@ export class SyncReconciler {
     const matchedRemoteIds = new Set<string>();
 
     const pushLists: TodoList[] = [];
+    const adoptLists: AdoptTarget[] = [];
     const pushItems: RemoteItemTarget[] = [];
-    const syncedLists: TodoList[] = [];
-    const syncedItems: TodoItem[] = [];
 
     for (const local of locals) {
-      const remote = this.matchList(local, remoteByExternalId, remoteBySourceId);
-      if (remote === null) {
-        pushLists.push(local);
+      if (local.externalId !== null) {
+        const remote = remoteByExternalId.get(local.externalId);
+        if (remote) {
+          matchedRemoteIds.add(remote.externalId);
+          this.collectNewItems(local, remote, pushItems);
+        }
         continue;
       }
-      matchedRemoteIds.add(remote.externalId);
-      syncedLists.push(local);
-      this.partitionItems(local, remote, syncedItems, pushItems);
+
+      const remote = remoteBySourceId.get(String(local.id));
+      if (remote) {
+        matchedRemoteIds.add(remote.externalId);
+        adoptLists.push({ local, remote });
+      } else {
+        pushLists.push(local);
+      }
     }
 
     const pullLists = remotes.filter((r) => !matchedRemoteIds.has(r.externalId));
-    return { pullLists, pushLists, pushItems, syncedLists, syncedItems };
+    return { pullLists, pushLists, adoptLists, pushItems };
   }
 
-  private matchList(
-    local: TodoList,
-    byExternalId: Map<string, RemoteTodoList>,
-    bySourceId: Map<string, RemoteTodoList>,
-  ): RemoteTodoList | null {
-    if (local.externalId !== null) {
-      return byExternalId.get(local.externalId) ?? null;
-    }
-    return bySourceId.get(String(local.id)) ?? null;
-  }
-
-  private partitionItems(
+  private collectNewItems(
     local: TodoList,
     remote: RemoteTodoList,
-    synced: TodoItem[],
-    toPush: RemoteItemTarget[],
+    pushItems: RemoteItemTarget[],
   ): void {
-    const remoteItemExternalIds = new Set(
-      remote.items.map((item) => item.externalId),
-    );
-    const remoteItemSourceIds = collectSourceIds(remote.items);
-
+    const remoteSourceIds = collectSourceIds(remote.items);
     for (const item of local.items) {
-      if (matchesRemoteItem(item, remoteItemExternalIds, remoteItemSourceIds)) {
-        synced.push(item);
-      } else {
-        toPush.push({ listExternalId: remote.externalId, item });
+      if (item.externalId !== null) {
+        continue;
       }
+      if (remoteSourceIds.has(String(item.id))) {
+        continue;
+      }
+      pushItems.push({ listExternalId: remote.externalId, item });
     }
   }
 }
@@ -96,15 +93,4 @@ function collectSourceIds(items: RemoteTodoItem[]): Set<string> {
     }
   }
   return sourceIds;
-}
-
-function matchesRemoteItem(
-  item: TodoItem,
-  remoteExternalIds: Set<string>,
-  remoteSourceIds: Set<string>,
-): boolean {
-  if (item.externalId !== null) {
-    return remoteExternalIds.has(item.externalId);
-  }
-  return remoteSourceIds.has(String(item.id));
 }

@@ -4,6 +4,7 @@ import { UpdateTodoListDto } from './dtos/update-todo_list';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TodoList } from './todo_list.entity';
+import { SyncStatus } from '../sync/sync-status.enum';
 
 @Injectable()
 export class TodoListsService {
@@ -26,7 +27,11 @@ export class TodoListsService {
   }
 
   async update(id: number, dto: UpdateTodoListDto): Promise<TodoList> {
-    return await this.todoListRepository.save({ id, ...dto } as TodoList);
+    return await this.todoListRepository.save({
+      id,
+      ...dto,
+      syncStatus: SyncStatus.Pending,
+    });
   }
 
   // Soft delete: sets the deletedAt tombstone instead of removing the row, so

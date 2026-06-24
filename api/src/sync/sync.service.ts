@@ -5,7 +5,11 @@ import { Repository } from 'typeorm';
 import { TodoList } from '../todo_lists/todo_list.entity';
 import { TodoItem } from '../todo_items/todo_item.entity';
 import { RemoteTodoGateway } from './remote-todo.gateway';
-import { SyncReconciler, RemoteItemTarget } from './sync.reconciler';
+import {
+  SyncReconciler,
+  RemoteItemTarget,
+  AdoptTarget,
+} from './sync.reconciler';
 import { SyncStatus } from './sync-status.enum';
 import { RemoteTodoList } from './domain/remote-todo-list';
 import { RemoteTodoItem } from './domain/remote-todo-item';
@@ -14,6 +18,7 @@ import { UnsupportedRemoteOperationError } from './external/unsupported-remote-o
 export interface SyncSummary {
   pulled: number;
   pushed: number;
+  adopted: number;
   unsynced: number;
   failed: string[];
 }
@@ -37,13 +42,20 @@ export class SyncService {
     const summary = await this.run();
     this.logger.log(
       `sync: pulled=${summary.pulled} pushed=${summary.pushed} ` +
-        `unsynced=${summary.unsynced} failed=${summary.failed.length}`,
+        `adopted=${summary.adopted} unsynced=${summary.unsynced} ` +
+        `failed=${summary.failed.length}`,
     );
   }
 
   async run(): Promise<SyncSummary> {
     if (this.running) {
-      return { pulled: 0, pushed: 0, unsynced: 0, failed: ['already running'] };
+      return {
+        pulled: 0,
+        pushed: 0,
+        adopted: 0,
+        unsynced: 0,
+        failed: ['already running'],
+      };
     }
     this.running = true;
     try {
@@ -62,7 +74,13 @@ export class SyncService {
     try {
       remotes = await this.remote.fetchAll();
     } catch (error) {
-      return { pulled: 0, pushed: 0, unsynced: 0, failed: [describe(error)] };
+      return {
+        pulled: 0,
+        pushed: 0,
+        adopted: 0,
+        unsynced: 0,
+        failed: [describe(error)],
+      };
     }
 
     const plan = this.reconciler.reconcile(locals, remotes);
@@ -70,11 +88,10 @@ export class SyncService {
 
     const pulled = await this.pullLists(plan.pullLists);
     const pushed = await this.pushLists(plan.pushLists, failed);
+    const adopted = await this.adoptLists(plan.adoptLists, failed);
     const unsynced = await this.pushItems(plan.pushItems, failed);
-    await this.markSynced(this.todoListRepository, plan.syncedLists);
-    await this.markSynced(this.todoItemRepository, plan.syncedItems);
 
-    return { pulled, pushed, unsynced, failed };
+    return { pulled, pushed, adopted, unsynced, failed };
   }
 
   private async pullLists(lists: RemoteTodoList[]): Promise<number> {
@@ -175,15 +192,20 @@ export class SyncService {
     return unsynced;
   }
 
-  private async markSynced<T extends TodoList | TodoItem>(
-    repository: Repository<T>,
-    rows: T[],
-  ): Promise<void> {
-    const changed = rows.filter((row) => row.syncStatus !== SyncStatus.Synced);
-    for (const row of changed) {
-      row.syncStatus = SyncStatus.Synced;
+  private async adoptLists(
+    targets: AdoptTarget[],
+    failed: string[],
+  ): Promise<number> {
+    let adopted = 0;
+    for (const { local, remote } of targets) {
+      try {
+        await this.adoptRemoteList(local, remote);
+        adopted += 1;
+      } catch (error) {
+        failed.push(`adopt list ${local.id}: ${describe(error)}`);
+      }
     }
-    await repository.save(changed);
+    return adopted;
   }
 }
 

@@ -133,4 +133,70 @@ describe('SyncService', () => {
     expect(summary.failed).toEqual([]);
     expect(newItem.syncStatus).toBe(SyncStatus.Unsynced);
   });
+
+  it('adopts a source-id match by backfilling external ids', async () => {
+    const gateway = new FakeRemoteTodoGateway();
+    gateway.remotes = [
+      {
+        externalId: 'R7',
+        sourceId: '1',
+        name: 'Groceries',
+        updatedAt: new Date(),
+        items: [
+          {
+            externalId: 'RI7',
+            sourceId: '2',
+            title: 'Buy milk',
+            completed: false,
+            updatedAt: new Date(),
+          },
+        ],
+      },
+    ];
+    const item = makeItem({ id: 2, title: 'Buy milk' });
+    const list = makeList({ id: 1, externalId: null, items: [item] });
+
+    const service = await buildService(gateway, [list]);
+    const summary = await service.run();
+
+    expect(summary.adopted).toBe(1);
+    expect(list.externalId).toBe('R7');
+    expect(list.syncStatus).toBe(SyncStatus.Synced);
+    expect(item.externalId).toBe('RI7');
+    expect(item.syncStatus).toBe(SyncStatus.Synced);
+  });
+
+  it('does not re-mark an edited, already-linked item as synced', async () => {
+    const gateway = new FakeRemoteTodoGateway();
+    gateway.remotes = [
+      {
+        externalId: 'R1',
+        sourceId: null,
+        name: 'Groceries',
+        updatedAt: new Date(),
+        items: [
+          {
+            externalId: 'RI1',
+            sourceId: null,
+            title: 'Buy milk',
+            completed: false,
+            updatedAt: new Date(),
+          },
+        ],
+      },
+    ];
+    const editedItem = makeItem({
+      id: 9,
+      externalId: 'RI1',
+      syncStatus: SyncStatus.Pending,
+    });
+    const list = makeList({ id: 1, externalId: 'R1', items: [editedItem] });
+
+    const service = await buildService(gateway, [list]);
+    const summary = await service.run();
+
+    expect(editedItem.syncStatus).toBe(SyncStatus.Pending);
+    expect(summary.unsynced).toBe(0);
+    expect(summary.failed).toEqual([]);
+  });
 });

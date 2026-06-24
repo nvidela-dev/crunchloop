@@ -65,15 +65,16 @@ describe('SyncReconciler', () => {
 
     expect(plan.pushLists).toEqual([local]);
     expect(plan.pullLists).toEqual([]);
+    expect(plan.adoptLists).toEqual([]);
   });
 
-  it('matches a synced list by externalId and partitions its items', () => {
-    const syncedItem = makeItem({ id: 10, externalId: 'RI1' });
+  it('only pushes brand-new items on a matched list, leaving linked ones alone', () => {
+    const linkedItem = makeItem({ id: 10, externalId: 'RI1' });
     const newItem = makeItem({ id: 11, externalId: null });
     const local = makeList({
       id: 1,
       externalId: 'R1',
-      items: [syncedItem, newItem],
+      items: [linkedItem, newItem],
     });
     const remote = makeRemoteList({
       externalId: 'R1',
@@ -82,20 +83,19 @@ describe('SyncReconciler', () => {
 
     const plan = reconciler.reconcile([local], [remote]);
 
-    expect(plan.syncedLists).toEqual([local]);
-    expect(plan.syncedItems).toEqual([syncedItem]);
     expect(plan.pushItems).toEqual([{ listExternalId: 'R1', item: newItem }]);
     expect(plan.pushLists).toEqual([]);
     expect(plan.pullLists).toEqual([]);
+    expect(plan.adoptLists).toEqual([]);
   });
 
-  it('matches a not-yet-adopted local list by its source id', () => {
+  it('adopts a local list matched only by source id', () => {
     const local = makeList({ id: 7, externalId: null });
     const remote = makeRemoteList({ externalId: 'R9', sourceId: '7' });
 
     const plan = reconciler.reconcile([local], [remote]);
 
-    expect(plan.syncedLists).toEqual([local]);
+    expect(plan.adoptLists).toEqual([{ local, remote }]);
     expect(plan.pushLists).toEqual([]);
     expect(plan.pullLists).toEqual([]);
   });

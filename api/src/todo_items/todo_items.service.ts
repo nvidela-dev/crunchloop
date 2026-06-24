@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { TodoItem } from './todo_item.entity';
 import { CreateTodoItemDto } from './dtos/create-todo_item';
 import { UpdateTodoItemDto } from './dtos/update-todo_item';
+import { SyncStatus } from '../sync/sync-status.enum';
 
 @Injectable()
 export class TodoItemsService {
@@ -38,7 +39,8 @@ export class TodoItemsService {
       id,
       todoListId,
       ...dto,
-    } as TodoItem);
+      syncStatus: SyncStatus.Pending,
+    });
   }
 
   // Soft delete: sets the deletedAt tombstone instead of removing the row, so
