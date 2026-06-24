@@ -28,6 +28,21 @@ make clean     # stop + drop volumes (Postgres + SQLite)
 
 Start a single service with `make api`, `make external-api`, or `make frontend`.
 
+## Run the Frontend
+
+Use the Makefile from the repository root:
+
+```bash
+make frontend       # build + start the frontend and its api dependency
+make urls           # print the frontend and api URLs
+make logs-frontend  # tail the Vite dev server logs
+make down           # stop the stack
+```
+
+The frontend is served at `http://localhost:5173` by default. It polls the local
+API configured by `VITE_API_URL`; with Docker Compose, that defaults to
+`http://localhost:3000`.
+
 ## Runtime Configuration
 
 Copy `.env.example` to `.env` to override local ports and sync timing.
