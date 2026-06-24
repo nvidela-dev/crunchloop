@@ -7,8 +7,11 @@ import { TodoItem } from '../todo_items/todo_item.entity';
 import { RemoteTodoGateway } from './remote-todo.gateway';
 import {
   SyncReconciler,
+  SyncPlan,
+  ListPullUpdate,
+  ItemPullUpdate,
+  ItemPullCreate,
   RemoteItemTarget,
-  AdoptTarget,
 } from './sync.reconciler';
 import { SyncStatus } from './sync-status.enum';
 import { RemoteTodoList } from './domain/remote-todo-list';
@@ -19,8 +22,22 @@ export interface SyncSummary {
   pulled: number;
   pushed: number;
   adopted: number;
+  updated: number;
+  deleted: number;
   unsynced: number;
   failed: string[];
+}
+
+function emptySummary(failed: string[]): SyncSummary {
+  return {
+    pulled: 0,
+    pushed: 0,
+    adopted: 0,
+    updated: 0,
+    deleted: 0,
+    unsynced: 0,
+    failed,
+  };
 }
 
 @Injectable()
@@ -43,23 +60,17 @@ export class SyncService {
     if (!this.scheduleEnabled) {
       return;
     }
-    const summary = await this.run();
+    const s = await this.run();
     this.logger.log(
-      `sync: pulled=${summary.pulled} pushed=${summary.pushed} ` +
-        `adopted=${summary.adopted} unsynced=${summary.unsynced} ` +
-        `failed=${summary.failed.length}`,
+      `sync: pulled=${s.pulled} pushed=${s.pushed} adopted=${s.adopted} ` +
+        `updated=${s.updated} deleted=${s.deleted} unsynced=${s.unsynced} ` +
+        `failed=${s.failed.length}`,
     );
   }
 
   async run(): Promise<SyncSummary> {
     if (this.running) {
-      return {
-        pulled: 0,
-        pushed: 0,
-        adopted: 0,
-        unsynced: 0,
-        failed: ['already running'],
-      };
+      return emptySummary(['already running']);
     }
     this.running = true;
     try {
@@ -72,34 +83,32 @@ export class SyncService {
   private async reconcileOnce(): Promise<SyncSummary> {
     const locals = await this.todoListRepository.find({
       relations: { items: true },
+      withDeleted: true,
     });
 
     let remotes: RemoteTodoList[];
     try {
       remotes = await this.remote.fetchAll();
     } catch (error) {
-      return {
-        pulled: 0,
-        pushed: 0,
-        adopted: 0,
-        unsynced: 0,
-        failed: [describe(error)],
-      };
+      return emptySummary([describe(error)]);
     }
 
     const plan = this.reconciler.reconcile(locals, remotes);
     const failed: string[] = [];
 
-    const pulled = await this.pullLists(plan.pullLists);
-    const pushed = await this.pushLists(plan.pushLists, failed);
-    const adopted = await this.adoptLists(plan.adoptLists, failed);
-    const unsynced = await this.pushItems(plan.pushItems, failed);
+    const pulled = await this.applyCreateLocal(plan);
+    const pushed = await this.applyPushLists(plan.createRemote.lists, failed);
+    const unsynced = await this.applyPushItems(plan.createRemote.items, failed);
+    const adopted = await this.applyAdopt(plan, failed);
+    const updated = await this.applyUpdates(plan, failed);
+    const deleted = await this.applyDeletes(plan, failed);
+    await this.applyMarkSynced(plan);
 
-    return { pulled, pushed, adopted, unsynced, failed };
+    return { pulled, pushed, adopted, updated, deleted, unsynced, failed };
   }
 
-  private async pullLists(lists: RemoteTodoList[]): Promise<number> {
-    for (const remote of lists) {
+  private async applyCreateLocal(plan: SyncPlan): Promise<number> {
+    for (const remote of plan.createLocal.lists) {
       const list = await this.todoListRepository.save(
         this.todoListRepository.create({
           name: remote.name,
@@ -107,22 +116,32 @@ export class SyncService {
           syncStatus: SyncStatus.Synced,
         }),
       );
-      const items = remote.items.map((item) =>
-        this.todoItemRepository.create({
-          title: item.title,
-          description: '',
-          completed: item.completed,
-          todoListId: list.id,
-          externalId: item.externalId,
-          syncStatus: SyncStatus.Synced,
-        }),
+      await this.createLocalItems(
+        remote.items.map((remoteItem) => ({ list, remote: remoteItem })),
       );
-      await this.todoItemRepository.save(items);
     }
-    return lists.length;
+    await this.createLocalItems(plan.createLocal.items);
+    return plan.createLocal.lists.length + plan.createLocal.items.length;
   }
 
-  private async pushLists(lists: TodoList[], failed: string[]): Promise<number> {
+  private async createLocalItems(targets: ItemPullCreate[]): Promise<void> {
+    const items = targets.map(({ list, remote }) =>
+      this.todoItemRepository.create({
+        title: remote.title,
+        description: '',
+        completed: remote.completed,
+        todoListId: list.id,
+        externalId: remote.externalId,
+        syncStatus: SyncStatus.Synced,
+      }),
+    );
+    await this.todoItemRepository.save(items);
+  }
+
+  private async applyPushLists(
+    lists: TodoList[],
+    failed: string[],
+  ): Promise<number> {
     let pushed = 0;
     for (const local of lists) {
       try {
@@ -144,28 +163,7 @@ export class SyncService {
     return pushed;
   }
 
-  private async adoptRemoteList(
-    local: TodoList,
-    remote: RemoteTodoList,
-  ): Promise<void> {
-    local.externalId = remote.externalId;
-    local.syncStatus = SyncStatus.Synced;
-    await this.todoListRepository.save(local);
-
-    const remoteItemsBySourceId = indexRemoteItemsBySourceId(remote.items);
-    for (const item of local.items) {
-      const match = remoteItemsBySourceId.get(String(item.id));
-      if (match) {
-        item.externalId = match.externalId;
-        item.syncStatus = SyncStatus.Synced;
-      } else {
-        item.syncStatus = SyncStatus.Unsynced;
-      }
-    }
-    await this.todoItemRepository.save(local.items);
-  }
-
-  private async pushItems(
+  private async applyPushItems(
     targets: RemoteItemTarget[],
     failed: string[],
   ): Promise<number> {
@@ -196,12 +194,9 @@ export class SyncService {
     return unsynced;
   }
 
-  private async adoptLists(
-    targets: AdoptTarget[],
-    failed: string[],
-  ): Promise<number> {
+  private async applyAdopt(plan: SyncPlan, failed: string[]): Promise<number> {
     let adopted = 0;
-    for (const { local, remote } of targets) {
+    for (const { local, remote } of plan.adopt.lists) {
       try {
         await this.adoptRemoteList(local, remote);
         adopted += 1;
@@ -209,7 +204,183 @@ export class SyncService {
         failed.push(`adopt list ${local.id}: ${describe(error)}`);
       }
     }
-    return adopted;
+    const items = plan.adopt.items.map(({ item, remote }) => {
+      item.externalId = remote.externalId;
+      item.syncStatus = SyncStatus.Synced;
+      return item;
+    });
+    await this.todoItemRepository.save(items);
+    return adopted + items.length;
+  }
+
+  private async applyUpdates(plan: SyncPlan, failed: string[]): Promise<number> {
+    let updated = 0;
+    updated += await this.pushListUpdates(plan.updateRemote.lists, failed);
+    updated += await this.pushItemUpdates(plan.updateRemote.items, failed);
+    updated += await this.pullListUpdates(plan.updateLocal.lists);
+    updated += await this.pullItemUpdates(plan.updateLocal.items);
+    return updated;
+  }
+
+  private async pushListUpdates(
+    lists: TodoList[],
+    failed: string[],
+  ): Promise<number> {
+    let count = 0;
+    for (const local of lists) {
+      if (local.externalId === null) {
+        continue;
+      }
+      try {
+        await this.remote.updateList(local.externalId, { name: local.name });
+        local.syncStatus = SyncStatus.Synced;
+        await this.todoListRepository.save(local);
+        count += 1;
+      } catch (error) {
+        failed.push(`update list ${local.id}: ${describe(error)}`);
+      }
+    }
+    return count;
+  }
+
+  private async pushItemUpdates(
+    targets: RemoteItemTarget[],
+    failed: string[],
+  ): Promise<number> {
+    let count = 0;
+    for (const { listExternalId, item } of targets) {
+      if (item.externalId === null) {
+        continue;
+      }
+      try {
+        await this.remote.updateItem(listExternalId, item.externalId, {
+          title: item.title,
+          completed: item.completed,
+        });
+        item.syncStatus = SyncStatus.Synced;
+        await this.todoItemRepository.save(item);
+        count += 1;
+      } catch (error) {
+        failed.push(`update item ${item.id}: ${describe(error)}`);
+      }
+    }
+    return count;
+  }
+
+  private async pullListUpdates(updates: ListPullUpdate[]): Promise<number> {
+    const lists = updates.map(({ local, remote }) => {
+      local.name = remote.name;
+      local.syncStatus = SyncStatus.Synced;
+      return local;
+    });
+    await this.todoListRepository.save(lists);
+    return lists.length;
+  }
+
+  private async pullItemUpdates(updates: ItemPullUpdate[]): Promise<number> {
+    const items = updates.map(({ item, remote }) => {
+      item.title = remote.title;
+      item.completed = remote.completed;
+      item.syncStatus = SyncStatus.Synced;
+      return item;
+    });
+    await this.todoItemRepository.save(items);
+    return items.length;
+  }
+
+  private async applyDeletes(plan: SyncPlan, failed: string[]): Promise<number> {
+    let deleted = 0;
+    deleted += await this.deleteRemoteItems(plan.deleteRemote.items, failed);
+    deleted += await this.deleteRemoteLists(plan.deleteRemote.lists, failed);
+    deleted += await this.removeLocalItems(plan.removeLocal.items);
+    deleted += await this.removeLocalLists(plan.removeLocal.lists);
+    return deleted;
+  }
+
+  private async deleteRemoteLists(
+    lists: TodoList[],
+    failed: string[],
+  ): Promise<number> {
+    let count = 0;
+    for (const local of lists) {
+      if (local.externalId === null) {
+        continue;
+      }
+      try {
+        await this.remote.deleteList(local.externalId);
+        await this.todoListRepository.delete(local.id);
+        count += 1;
+      } catch (error) {
+        failed.push(`delete list ${local.id}: ${describe(error)}`);
+      }
+    }
+    return count;
+  }
+
+  private async deleteRemoteItems(
+    targets: RemoteItemTarget[],
+    failed: string[],
+  ): Promise<number> {
+    let count = 0;
+    for (const { listExternalId, item } of targets) {
+      if (item.externalId === null) {
+        continue;
+      }
+      try {
+        await this.remote.deleteItem(listExternalId, item.externalId);
+        await this.todoItemRepository.delete(item.id);
+        count += 1;
+      } catch (error) {
+        failed.push(`delete item ${item.id}: ${describe(error)}`);
+      }
+    }
+    return count;
+  }
+
+  private async removeLocalLists(lists: TodoList[]): Promise<number> {
+    for (const local of lists) {
+      await this.todoListRepository.delete(local.id);
+    }
+    return lists.length;
+  }
+
+  private async removeLocalItems(items: TodoItem[]): Promise<number> {
+    for (const item of items) {
+      await this.todoItemRepository.delete(item.id);
+    }
+    return items.length;
+  }
+
+  private async applyMarkSynced(plan: SyncPlan): Promise<void> {
+    for (const list of plan.markSynced.lists) {
+      list.syncStatus = SyncStatus.Synced;
+    }
+    await this.todoListRepository.save(plan.markSynced.lists);
+    for (const item of plan.markSynced.items) {
+      item.syncStatus = SyncStatus.Synced;
+    }
+    await this.todoItemRepository.save(plan.markSynced.items);
+  }
+
+  private async adoptRemoteList(
+    local: TodoList,
+    remote: RemoteTodoList,
+  ): Promise<void> {
+    local.externalId = remote.externalId;
+    local.syncStatus = SyncStatus.Synced;
+    await this.todoListRepository.save(local);
+
+    const remoteItemsBySourceId = indexRemoteItemsBySourceId(remote.items);
+    for (const item of local.items) {
+      const match = remoteItemsBySourceId.get(String(item.id));
+      if (match) {
+        item.externalId = match.externalId;
+        item.syncStatus = SyncStatus.Synced;
+      } else {
+        item.syncStatus = SyncStatus.Unsynced;
+      }
+    }
+    await this.todoItemRepository.save(local.items);
   }
 }
 

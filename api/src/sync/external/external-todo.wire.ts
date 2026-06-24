@@ -1,6 +1,14 @@
 import { z } from 'zod';
-import { RemoteTodoList, RemoteTodoListDraft } from '../domain/remote-todo-list';
-import { RemoteTodoItem, RemoteTodoItemDraft } from '../domain/remote-todo-item';
+import {
+  RemoteTodoList,
+  RemoteTodoListDraft,
+  RemoteTodoListPatch,
+} from '../domain/remote-todo-list';
+import {
+  RemoteTodoItem,
+  RemoteTodoItemDraft,
+  RemoteTodoItemPatch,
+} from '../domain/remote-todo-item';
 
 export interface ExternalItemPayload {
   source_id: string;
@@ -58,6 +66,21 @@ export function parseRemoteList(value: unknown): RemoteTodoList {
 
 export function parseRemoteLists(value: unknown): RemoteTodoList[] {
   return z.array(remoteListSchema).parse(value);
+}
+
+export function parseRemoteItem(value: unknown): RemoteTodoItem {
+  return remoteItemSchema.parse(value);
+}
+
+export function toListPatch(patch: RemoteTodoListPatch): { name: string } {
+  return { name: patch.name };
+}
+
+export function toItemPatch(patch: RemoteTodoItemPatch): {
+  description: string;
+  completed: boolean;
+} {
+  return { description: patch.title, completed: patch.completed };
 }
 
 export function toItemPayload(draft: RemoteTodoItemDraft): ExternalItemPayload {

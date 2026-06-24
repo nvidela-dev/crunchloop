@@ -13,3 +13,7 @@ export interface RemoteTodoListDraft {
   name: string;
   items: RemoteTodoItemDraft[];
 }
+
+export interface RemoteTodoListPatch {
+  name: string;
+}

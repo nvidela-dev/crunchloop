@@ -13,6 +13,18 @@ function wireList(overrides: Record<string, unknown> = {}): Record<string, unkno
   };
 }
 
+function wireItem(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: 'I1',
+    source_id: 'src-i1',
+    description: 'Buy milk',
+    completed: false,
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-02T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
 describe('ExternalTodoGateway', () => {
   const originalFetch = globalThis.fetch;
 
@@ -81,5 +93,61 @@ describe('ExternalTodoGateway', () => {
     await expect(
       gateway.createItem('L1', { sourceId: '2', title: 'x', completed: false }),
     ).rejects.toBeInstanceOf(UnsupportedRemoteOperationError);
+  });
+
+  it('updateList patches the list and returns the parsed result', async () => {
+    const mock = installFetch(
+      new Response(JSON.stringify(wireList({ name: 'Renamed' })), { status: 200 }),
+    );
+    const gateway = new ExternalTodoGateway();
+
+    const result = await gateway.updateList('L1', { name: 'Renamed' });
+
+    expect(result.name).toBe('Renamed');
+    const [url, init] = mock.mock.calls[0];
+    expect(String(url)).toContain('/todolists/L1');
+    expect(init?.method).toBe('PATCH');
+    expect(JSON.parse(String(init?.body))).toEqual({ name: 'Renamed' });
+  });
+
+  it('deleteList issues a DELETE on the list path', async () => {
+    const mock = installFetch(new Response(null, { status: 204 }));
+    const gateway = new ExternalTodoGateway();
+
+    await expect(gateway.deleteList('L1')).resolves.toBeUndefined();
+    const [url, init] = mock.mock.calls[0];
+    expect(String(url)).toContain('/todolists/L1');
+    expect(init?.method).toBe('DELETE');
+  });
+
+  it('updateItem patches the item, mapping title -> description', async () => {
+    const mock = installFetch(
+      new Response(JSON.stringify(wireItem({ description: 'done', completed: true })), {
+        status: 200,
+      }),
+    );
+    const gateway = new ExternalTodoGateway();
+
+    const result = await gateway.updateItem('L1', 'I1', {
+      title: 'done',
+      completed: true,
+    });
+
+    expect(result.title).toBe('done');
+    const [url, init] = mock.mock.calls[0];
+    expect(String(url)).toContain('/todolists/L1/todoitems/I1');
+    expect(init?.method).toBe('PATCH');
+    expect(JSON.parse(String(init?.body))).toEqual({
+      description: 'done',
+      completed: true,
+    });
+  });
+
+  it('deleteItem issues a DELETE on the nested item path', async () => {
+    const mock = installFetch(new Response(null, { status: 204 }));
+    const gateway = new ExternalTodoGateway();
+
+    await expect(gateway.deleteItem('L1', 'I1')).resolves.toBeUndefined();
+    expect(String(mock.mock.calls[0][0])).toContain('/todolists/L1/todoitems/I1');
   });
 });
