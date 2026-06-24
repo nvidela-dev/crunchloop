@@ -48,8 +48,9 @@ The API listens on `http://localhost:3000` (Swagger at `/api`). Configuration is
 read from environment variables — `PORT`, `DB_HOST`, `DB_PORT`, `DB_USERNAME`,
 `DB_PASSWORD`, `DB_DATABASE`, `EXTERNAL_API_URL`, `EXTERNAL_API_TIMEOUT_MS`,
 `EXTERNAL_API_RETRY_ATTEMPTS`, `EXTERNAL_API_RETRY_BASE_DELAY_MS`, and
-`SYNC_CRON_ENABLED` — which the compose file wires to the `postgres` and
-`external-api` services.
+`SYNC_CRON_ENABLED`. Set `SYNC_INTERVAL_MS` to control the scheduled external
+sync interval; it defaults to `60000` ms. The compose file wires these values to
+the `postgres` and `external-api` services.
 
 ### Standalone (host Node)
 

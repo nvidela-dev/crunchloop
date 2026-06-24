@@ -28,6 +28,15 @@ make clean     # stop + drop volumes (Postgres + SQLite)
 
 Start a single service with `make api`, `make external-api`, or `make frontend`.
 
+## Runtime Configuration
+
+Copy `.env.example` to `.env` to override local ports and sync timing.
+
+- `SYNC_INTERVAL_MS` controls how often the backend synchronizes with the
+  external API. The default is `60000` ms.
+- `VITE_API_POLL_INTERVAL_MS` controls how often the browser refreshes from the
+  local API. The default is `5000` ms.
+
 ## The APIs
 
 **Local API (`api/`, port 3000)** — CRUD for todo lists and nested items, Swagger

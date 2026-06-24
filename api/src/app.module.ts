@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { ScheduleModule } from '@nestjs/schedule';
 import { TodoListsModule } from './todo_lists/todo_lists.module';
 import { TodoItemsModule } from './todo_items/todo_items.module';
 import { SyncModule } from './sync/sync.module';
@@ -11,7 +10,6 @@ import { TodoItem } from './todo_items/todo_item.entity';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    ScheduleModule.forRoot(),
     TodoListsModule,
     TodoItemsModule,
     SyncModule,

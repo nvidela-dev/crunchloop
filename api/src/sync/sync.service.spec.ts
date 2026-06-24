@@ -393,4 +393,66 @@ describe('SyncService', () => {
     );
     expect(summary.pulled).toBe(1);
   });
+
+  describe('scheduled sync timing', () => {
+    const originalCronEnabled = process.env.SYNC_CRON_ENABLED;
+    const originalInterval = process.env.SYNC_INTERVAL_MS;
+
+    afterEach(() => {
+      restoreEnv('SYNC_CRON_ENABLED', originalCronEnabled);
+      restoreEnv('SYNC_INTERVAL_MS', originalInterval);
+      jest.useRealTimers();
+      jest.restoreAllMocks();
+    });
+
+    it('uses a one-minute interval by default', async () => {
+      delete process.env.SYNC_CRON_ENABLED;
+      delete process.env.SYNC_INTERVAL_MS;
+      jest.useFakeTimers();
+      const setIntervalSpy = jest.spyOn(globalThis, 'setInterval');
+      const gateway = new FakeRemoteTodoGateway();
+      const { service } = await buildService(gateway, []);
+
+      service.onModuleInit();
+
+      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 60_000);
+      service.onModuleDestroy();
+    });
+
+    it('uses the configured sync interval', async () => {
+      delete process.env.SYNC_CRON_ENABLED;
+      process.env.SYNC_INTERVAL_MS = '12345';
+      jest.useFakeTimers();
+      const setIntervalSpy = jest.spyOn(globalThis, 'setInterval');
+      const gateway = new FakeRemoteTodoGateway();
+      const { service } = await buildService(gateway, []);
+
+      service.onModuleInit();
+
+      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 12_345);
+      service.onModuleDestroy();
+    });
+
+    it('does not schedule when cron is disabled', async () => {
+      process.env.SYNC_CRON_ENABLED = 'false';
+      process.env.SYNC_INTERVAL_MS = '12345';
+      jest.useFakeTimers();
+      const setIntervalSpy = jest.spyOn(globalThis, 'setInterval');
+      const gateway = new FakeRemoteTodoGateway();
+      const { service } = await buildService(gateway, []);
+
+      service.onModuleInit();
+
+      expect(setIntervalSpy).not.toHaveBeenCalled();
+    });
+  });
 });
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name];
+    return;
+  }
+
+  process.env[name] = value;
+}
