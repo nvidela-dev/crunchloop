@@ -50,6 +50,12 @@ API will sync with. Routes are at the root (`/todolists`). See
   stack, seed both systems, run curl-based sync checks, and verify the local
   `title` to remote `description` mapping.
 
+Run the full backend verification suite with:
+
+```bash
+make verify-backend
+```
+
 ## Tests & linting
 
 ```bash

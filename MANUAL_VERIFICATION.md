@@ -3,9 +3,12 @@
 This guide verifies the backend sync behavior with real HTTP calls against the
 local NestJS API, the external Todo API, and Postgres.
 
-The commands below intentionally avoid the frontend. They reset the Docker
-volumes, seed both APIs, and run deterministic sync checks with the scheduler
-disabled.
+All runnable commands are exposed through the top-level `Makefile`. The longer
+curl flows live in `scripts/`, but reviewers should run them through `make`.
+
+The verification targets intentionally avoid the frontend. They run the API,
+Postgres, and external API with `SYNC_CRON_ENABLED=false` so sync checks are
+deterministic.
 
 ## Prerequisites
 
@@ -13,34 +16,45 @@ disabled.
 - The current branch is checked out.
 - Ports `3000`, `4000`, and `5432` are available.
 
-## 1. Start a Clean Backend Stack
+## Fast Path
 
-This drops the local Postgres and external SQLite volumes.
+Run the full backend verification suite:
 
 ```bash
-docker compose down -v
-SYNC_CRON_ENABLED=false docker compose up -d --build postgres api external-api
+make verify-backend
 ```
 
-Wait until both APIs answer:
+This target runs:
+
+- backend reset with scheduler disabled
+- backend tests, build, lint, Prettier, and whitespace checks
+- black-box functional sync suite
+- manual sync smoke checks
+- direct endpoint smoke checks
+- database schema check confirming there is no local `description` column
+
+Expected result: every target exits successfully.
+
+## Step-by-Step Verification
+
+Use this section when you want to inspect each layer separately.
+
+### 1. Reset the Backend Stack
 
 ```bash
-for i in $(seq 1 60); do
-  api_code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/todolists)
-  external_code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4000/todolists)
-  echo "attempt=$i api=$api_code external=$external_code"
-  if [ "$api_code" = "200" ] && [ "$external_code" = "200" ]; then
-    break
-  fi
-  sleep 2
-done
+make verify-reset
 ```
 
-## 2. Seed Both APIs
+Expected:
+
+- Postgres, local API, and external API are rebuilt/started.
+- Frontend is not started.
+- The command waits until both APIs answer HTTP `200`.
+
+### 2. Seed Both APIs
 
 ```bash
-docker compose exec -T api npm run seed
-./scripts/seed-external.sh
+make seed
 ```
 
 Expected:
@@ -48,10 +62,10 @@ Expected:
 - Local API seed reports `2 lists, 4 items`.
 - External API seed reports `3 list(s)`.
 
-## 3. Run the Black-Box Functional Suite
+### 3. Run the Black-Box Functional Suite
 
 ```bash
-bash scripts/functional-test.sh
+make functional-test
 ```
 
 Expected:
@@ -60,7 +74,7 @@ Expected:
 30 passed, 0 failed
 ```
 
-This covers:
+This target resets and seeds the backend stack before it runs. It covers:
 
 - request validation
 - initial convergence
@@ -72,186 +86,95 @@ This covers:
 - remote-to-local deletes
 - external API outage handling
 
-## 4. Run Backend Quality Gates
+### 4. Run Backend Quality Gates
 
 ```bash
-cd api
-npm test -- --runInBand
-npm run build
-npm run lint -- --max-warnings=0
-npx prettier --check "src/**/*.ts"
-cd ..
-git diff --check
+make verify-quality
 ```
 
 Expected:
 
-- Jest: all suites pass.
+- Jest passes.
 - Nest build succeeds.
 - ESLint reports no warnings or errors.
-- Prettier reports all matched files use Prettier style.
-- `git diff --check` prints no whitespace errors.
+- Prettier reports all matched API files use Prettier style.
+- The Makefile whitespace check reports no errors.
 
-## 5. Manual Sync Smoke Test
-
-Run one baseline sync:
+### 5. Run Manual Sync Smoke Checks
 
 ```bash
-curl -s -X POST http://localhost:3000/api/sync | python3 -m json.tool
-```
-
-Expected after the seed:
-
-```json
-{
-  "pulled": 3,
-  "pushed": 2,
-  "adopted": 0,
-  "updated": 0,
-  "deleted": 0,
-  "unsynced": 0,
-  "pendingRemoteCreates": 0,
-  "failed": []
-}
-```
-
-Run it again:
-
-```bash
-curl -s -X POST http://localhost:3000/api/sync | python3 -m json.tool
-```
-
-Expected no-op values:
-
-```json
-{
-  "pulled": 0,
-  "pushed": 0,
-  "updated": 0,
-  "deleted": 0,
-  "failed": []
-}
-```
-
-## 6. Verify Local Title to Remote Description Mapping
-
-Create a local list and item:
-
-```bash
-LOCAL_LIST_ID=$(
-  curl -s -X POST http://localhost:3000/api/todolists \
-    -H 'content-type: application/json' \
-    -d '{"name":"Manual Local"}' \
-  | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])'
-)
-
-LOCAL_ITEM_ID=$(
-  curl -s -X POST "http://localhost:3000/api/todolists/$LOCAL_LIST_ID/items" \
-    -H 'content-type: application/json' \
-    -d '{"title":"Manual local item"}' \
-  | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])'
-)
-```
-
-Sync:
-
-```bash
-curl -s -X POST http://localhost:3000/api/sync | python3 -m json.tool
-```
-
-Verify the local item was created remotely as `description`:
-
-```bash
-curl -s http://localhost:4000/todolists \
-| python3 -c 'import sys,json; d=json.load(sys.stdin); print(next(i["description"] for l in d if l["name"]=="Manual Local" for i in l["items"]))'
+make verify-manual-sync
 ```
 
 Expected:
 
 ```text
-Manual local item
+Manual sync smoke result: 26 passed, 0 failed
 ```
 
-Verify local item payloads do not expose `description`:
+This target resets and seeds the backend stack before it runs. It verifies:
+
+- baseline seed sync pulls remote-only data and pushes local-only data
+- immediate re-sync is a no-op
+- local `title` becomes remote `description`
+- remote `description` becomes local `title`
+- local item payloads do not expose `description`
+- the unsupported external item-create endpoint is explicit
+- a new local item under an already-synced list becomes `pending_remote_create`
+- local updates propagate to the external API
+- remote updates propagate to the local API
+- local deletes propagate to the external API
+- remote deletes propagate to the local API
+
+### 6. Run Direct Endpoint Smoke Checks
 
 ```bash
-curl -s "http://localhost:3000/api/todolists/$LOCAL_LIST_ID/items/$LOCAL_ITEM_ID" \
-| python3 -c 'import sys,json; d=json.load(sys.stdin); print("description" in d)'
+make verify-endpoints
 ```
 
 Expected:
 
 ```text
-False
+Endpoint smoke result: 19 passed, 0 failed
 ```
 
-## 7. Verify the External API Gap Is Explicit
+This target resets and seeds the backend stack before it runs. It verifies:
 
-Create a new item under the already-synced local list:
+- local list CRUD endpoints
+- local nested item CRUD endpoints
+- local item responses omit `description`
+- external list CRUD endpoints
+- external nested item update/delete endpoints
+
+### 7. Verify the Database Schema
 
 ```bash
-GAP_ITEM_ID=$(
-  curl -s -X POST "http://localhost:3000/api/todolists/$LOCAL_LIST_ID/items" \
-    -H 'content-type: application/json' \
-    -d '{"title":"Manual gap item"}' \
-  | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])'
-)
-
-curl -s -X POST http://localhost:3000/api/sync | python3 -m json.tool
+make verify-schema
 ```
 
-Expected summary includes:
-
-```json
-{
-  "unsynced": 1,
-  "pendingRemoteCreates": 1,
-  "failed": []
-}
-```
-
-Verify the local status:
-
-```bash
-docker compose exec -T postgres psql -U postgres -d nestjs_db -tA \
-  -c "SELECT \"syncStatus\" FROM todo_item WHERE id=$GAP_ITEM_ID"
-```
-
-Expected:
+Expected column list:
 
 ```text
-pending_remote_create
-```
-
-This is the intended behavior until the external API supports creating a single
-item under an existing list. See `RFC-001-external-api-item-lifecycle.md` and
-`RFC-002-sync-service-interim-action-plan.md`.
-
-## 8. Verify the Database Schema
-
-```bash
-docker compose exec -T postgres psql -U postgres -d nestjs_db -tA \
-  -c "SELECT column_name FROM information_schema.columns WHERE table_name='todo_item' ORDER BY ordinal_position;"
-```
-
-Expected columns:
-
-```text
-id
-title
-completed
-todoListId
-externalId
-syncStatus
-createdAt
-updatedAt
-deletedAt
+id,title,completed,todoListId,externalId,syncStatus,createdAt,updatedAt,deletedAt
 ```
 
 There should be no local `description` column.
 
-## 9. Stop the Stack
+### 8. Stop the Stack
 
 ```bash
-docker compose down
+make down
 ```
+
+## What `pending_remote_create` Means
+
+The external API can create items only as nested payloads in `POST /todolists`.
+It cannot create one new item under an already-existing list.
+
+The local sync service therefore preserves the local item, marks it as
+`pending_remote_create`, reports it in sync summaries, and avoids destructive
+delete/recreate workarounds.
+
+This is the intended behavior until the external API supports creating a single
+item under an existing list. See `RFC-001-external-api-item-lifecycle.md` and
+`RFC-002-sync-service-interim-action-plan.md`.
