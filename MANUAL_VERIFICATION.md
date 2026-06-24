@@ -35,6 +35,14 @@ This target runs:
 
 Expected result: every target exits successfully.
 
+Run the frontend verification separately:
+
+```bash
+make verify-frontend
+```
+
+Expected result: the frontend lint and production build both succeed.
+
 ## Step-by-Step Verification
 
 Use this section when you want to inspect each layer separately.
