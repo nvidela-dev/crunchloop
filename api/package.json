@@ -25,7 +25,6 @@
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
-    "@nestjs/schedule": "^6.1.3",
     "@nestjs/swagger": "^11.4.4",
     "@nestjs/typeorm": "^11.0.0",
     "class-transformer": "^0.5.1",

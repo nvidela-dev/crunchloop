@@ -35,11 +35,13 @@ services:
       - DB_USERNAME=${DB_USERNAME:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-postgres}
       - DB_DATABASE=${DB_DATABASE:-nestjs_db}
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:5173}
       - EXTERNAL_API_URL=http://external-api:4000
       - EXTERNAL_API_TIMEOUT_MS=${EXTERNAL_API_TIMEOUT_MS:-5000}
       - EXTERNAL_API_RETRY_ATTEMPTS=${EXTERNAL_API_RETRY_ATTEMPTS:-3}
       - EXTERNAL_API_RETRY_BASE_DELAY_MS=${EXTERNAL_API_RETRY_BASE_DELAY_MS:-100}
       - SYNC_CRON_ENABLED=${SYNC_CRON_ENABLED:-true}
+      - SYNC_INTERVAL_MS=${SYNC_INTERVAL_MS:-60000}
     ports:
       - "${API_PORT:-3000}:3000"
     volumes:
@@ -70,6 +72,7 @@ services:
       # The browser reaches the APIs via the host-published ports.
       - VITE_API_URL=http://localhost:${API_PORT:-3000}
       - VITE_EXTERNAL_API_URL=http://localhost:${EXTERNAL_API_PORT:-4000}
+      - VITE_API_POLL_INTERVAL_MS=${VITE_API_POLL_INTERVAL_MS:-5000}
     ports:
       - "${FRONTEND_PORT:-5173}:5173"
     volumes:

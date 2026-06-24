@@ -4,8 +4,25 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
+function readCorsOrigin(): string | string[] {
+  const fallback = 'http://localhost:5173';
+  const raw = process.env.CORS_ORIGIN ?? fallback;
+  const origins = raw
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+  const allowedOrigins = origins.length > 0 ? origins : [fallback];
+
+  return allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins;
+}
+
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  app.enableCors({
+    origin: readCorsOrigin(),
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+  });
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 

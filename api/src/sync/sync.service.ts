@@ -1,5 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TodoList } from '../todo_lists/todo_list.entity';
@@ -45,10 +49,25 @@ function emptySummary(failed: string[]): SyncSummaryWithoutDuration {
   };
 }
 
+function readPositiveIntegerEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 @Injectable()
-export class SyncService {
+export class SyncService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(SyncService.name);
   private readonly scheduleEnabled = process.env.SYNC_CRON_ENABLED !== 'false';
+  private readonly scheduleIntervalMs = readPositiveIntegerEnv(
+    'SYNC_INTERVAL_MS',
+    60_000,
+  );
+  private scheduledSyncTimer: ReturnType<typeof setInterval> | undefined;
   private running = false;
 
   constructor(
@@ -60,7 +79,26 @@ export class SyncService {
     private readonly todoItemRepository: Repository<TodoItem>,
   ) {}
 
-  @Cron(CronExpression.EVERY_30_SECONDS)
+  onModuleInit(): void {
+    if (!this.scheduleEnabled) {
+      this.logger.log('scheduled sync disabled');
+      return;
+    }
+
+    this.scheduledSyncTimer = setInterval(() => {
+      void this.scheduledSync();
+    }, this.scheduleIntervalMs);
+
+    this.logger.log(`scheduled sync intervalMs=${this.scheduleIntervalMs}`);
+  }
+
+  onModuleDestroy(): void {
+    if (this.scheduledSyncTimer !== undefined) {
+      clearInterval(this.scheduledSyncTimer);
+      this.scheduledSyncTimer = undefined;
+    }
+  }
+
   async scheduledSync(): Promise<void> {
     if (!this.scheduleEnabled) {
       return;
