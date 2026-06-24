@@ -4,12 +4,12 @@ This repository hosts **three independent projects** that run together as
 separate Docker containers, orchestrated by a single `docker-compose.yml` and a
 top-level `Makefile`.
 
-| Folder          | Project                          | Stack                    | URL                     |
-| --------------- | -------------------------------- | ------------------------ | ----------------------- |
-| `frontend/`     | Todo UI                          | React 19 + Vite          | http://localhost:5173   |
-| `api/`          | Local Todo API                   | NestJS 11 + TypeORM + PG | http://localhost:3000   |
-| `external-api/` | External Todo API                | Express + node:sqlite    | http://localhost:4000   |
-| —               | Postgres (for `api/`)            | postgres:17              | localhost:5432          |
+| Folder          | Project               | Stack                    | URL                   |
+| --------------- | --------------------- | ------------------------ | --------------------- |
+| `frontend/`     | Todo UI               | React 19 + Vite          | http://localhost:5173 |
+| `api/`          | Local Todo API        | NestJS 11 + TypeORM + PG | http://localhost:3000 |
+| `external-api/` | External Todo API     | Express + node:sqlite    | http://localhost:4000 |
+| —               | Postgres (for `api/`) | postgres:17              | localhost:5432        |
 
 Each project keeps its own structure, dependencies, and `Dockerfile`; they only
 share the compose network. Ports are predictable and overridable via a root
@@ -36,6 +36,19 @@ at http://localhost:3000/api. Routes are under `/api/todolists`.
 **External API (`external-api/`, port 4000)** — the external Todo API the local
 API will sync with. Routes are at the root (`/todolists`). See
 [`external-api/README.md`](external-api/README.md).
+
+## Sync Design and Verification
+
+- [`NOTES.md`](NOTES.md) explains the sync design, external API constraints, and
+  implementation tradeoffs.
+- [`RFC-001-external-api-item-lifecycle.md`](RFC-001-external-api-item-lifecycle.md)
+  proposes the missing external API item-create and idempotency contract.
+- [`RFC-002-sync-service-interim-action-plan.md`](RFC-002-sync-service-interim-action-plan.md)
+  documents the interim `pending_remote_create` behavior while that external
+  API gap exists.
+- [`MANUAL_VERIFICATION.md`](MANUAL_VERIFICATION.md) describes how to reset the
+  stack, seed both systems, run curl-based sync checks, and verify the local
+  `title` to remote `description` mapping.
 
 ## Tests & linting
 
