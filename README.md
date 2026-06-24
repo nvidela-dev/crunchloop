@@ -15,6 +15,20 @@ Each project keeps its own structure, dependencies, and `Dockerfile`; they only
 share the compose network. Ports are predictable and overridable via a root
 `.env` (copy `.env.example`).
 
+## Dev Container
+
+Open the repository root in a dev container. The root `.devcontainer/` setup
+uses Node 22 and Docker-outside-of-Docker so the same top-level `Makefile`
+commands work inside the container.
+
+After the container finishes its post-create install, run:
+
+```bash
+make up && make wait-backend && make seed && make urls
+```
+
+Then open the printed frontend URL, `http://localhost:5173` by default.
+
 ## Run everything
 
 ```bash
@@ -34,6 +48,7 @@ Use the Makefile from the repository root:
 
 ```bash
 make frontend       # build + start the frontend and its api dependency
+make frontend-build # run the frontend production build in Docker
 make urls           # print the frontend and api URLs
 make logs-frontend  # tail the Vite dev server logs
 make down           # stop the stack
@@ -88,6 +103,7 @@ make verify-backend
 ```bash
 make test      # api unit tests (in a throwaway container)
 make lint      # lint the TypeScript projects (api + frontend)
+make verify-frontend # lint + build the frontend
 ```
 
 The TypeScript projects (`api`, `frontend`) lint with a shared baseline:

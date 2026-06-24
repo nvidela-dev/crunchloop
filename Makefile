@@ -6,6 +6,13 @@ SHELL := /bin/bash
 # Prefer the v2 docker compose plugin; fall back to legacy docker-compose.
 COMPOSE := $(shell if docker compose version >/dev/null 2>&1; then echo "docker compose"; else echo "docker-compose"; fi)
 
+FRONTEND_PORT ?= 5173
+API_PORT ?= 3000
+EXTERNAL_API_PORT ?= 4000
+DB_PORT ?= 5432
+API_URL ?= http://localhost:$(API_PORT)
+EXTERNAL_API_URL ?= http://localhost:$(EXTERNAL_API_PORT)
+
 .DEFAULT_GOAL := help
 
 .PHONY: help
@@ -41,10 +48,10 @@ logs: ## Tail logs from all services
 
 .PHONY: urls
 urls: ## Print the service URLs
-	@echo "frontend     -> http://localhost:$${FRONTEND_PORT:-5173}"
-	@echo "api          -> http://localhost:$${API_PORT:-3000}      (swagger: /api)"
-	@echo "external-api -> http://localhost:$${EXTERNAL_API_PORT:-4000}"
-	@echo "postgres     -> localhost:$${DB_PORT:-5432}"
+	@echo "frontend     -> http://localhost:$(FRONTEND_PORT)"
+	@echo "api          -> $(API_URL)      (swagger: /api)"
+	@echo "external-api -> $(EXTERNAL_API_URL)"
+	@echo "postgres     -> localhost:$(DB_PORT)"
 
 .PHONY: clean
 clean: ## Stop the stack and drop all volumes (DB + sqlite)
@@ -79,12 +86,21 @@ lint: ## Lint the TypeScript projects (api + frontend)
 	$(COMPOSE) run --rm --no-deps api npm run lint
 	$(COMPOSE) run --rm --no-deps frontend npm run lint
 
+.PHONY: frontend-build
+frontend-build: ## Build the frontend TypeScript/Vite bundle
+	$(COMPOSE) run --rm --build --no-deps frontend npm run build
+
+.PHONY: verify-frontend
+verify-frontend: ## Run frontend lint and build checks
+	$(COMPOSE) run --rm --build --no-deps frontend npm run lint
+	$(COMPOSE) run --rm --build --no-deps frontend npm run build
+
 .PHONY: wait-backend
 wait-backend: ## Wait until the local API and external API answer HTTP 200
 	@echo "waiting for backend services..."
 	@for i in $$(seq 1 90); do \
-		la=$$(curl -s -o /dev/null -w '%{http_code}' http://localhost:$${API_PORT:-3000}/api/todolists 2>/dev/null); \
-		le=$$(curl -s -o /dev/null -w '%{http_code}' http://localhost:$${EXTERNAL_API_PORT:-4000}/todolists 2>/dev/null); \
+		la=$$(curl -s -o /dev/null -w '%{http_code}' "$(API_URL)/api/todolists" 2>/dev/null); \
+		le=$$(curl -s -o /dev/null -w '%{http_code}' "$(EXTERNAL_API_URL)/todolists" 2>/dev/null); \
 		echo "attempt=$$i api=$$la external=$$le"; \
 		if [ "$$la" = "200" ] && [ "$$le" = "200" ]; then exit 0; fi; \
 		sleep 2; \
@@ -148,7 +164,7 @@ verify-backend: ## Run the full backend sync verification suite
 # --- Seeding ---------------------------------------------------------------
 
 .PHONY: seed
-seed: seed-local seed-external ## Seed both APIs with demo data (stack must be up)
+seed: seed-local seed-external wait-seed ## Seed both APIs with demo data (stack must be up)
 
 .PHONY: seed-local
 seed-local: ## Seed the local API's Postgres
@@ -157,6 +173,19 @@ seed-local: ## Seed the local API's Postgres
 .PHONY: seed-external
 seed-external: ## Seed the external API over HTTP (no changes to its code)
 	./scripts/seed-external.sh
+
+.PHONY: wait-seed
+wait-seed: ## Wait until seeded local and external data is visible over HTTP
+	@echo "waiting for seeded data..."
+	@for i in $$(seq 1 30); do \
+		local_count=$$(curl -fsS "$(API_URL)/api/todolists" 2>/dev/null | python3 -c 'import sys,json; print(len(json.load(sys.stdin)))' 2>/dev/null || echo 0); \
+		external_count=$$(curl -fsS "$(EXTERNAL_API_URL)/todolists" 2>/dev/null | python3 -c 'import sys,json; print(len(json.load(sys.stdin)))' 2>/dev/null || echo 0); \
+		echo "attempt=$$i local=$$local_count external=$$external_count"; \
+		if [ "$$local_count" = "2" ] && [ "$$external_count" -ge 3 ] 2>/dev/null; then exit 0; fi; \
+		sleep 1; \
+	done; \
+	echo "seeded data did not become visible"; \
+	exit 1
 
 # --- Conversation transcripts ---------------------------------------------
 
