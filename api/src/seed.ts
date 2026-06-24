@@ -29,12 +29,10 @@ async function seed(): Promise<void> {
     await items.save([
       items.create({
         title: 'Milk',
-        description: 'Whole milk',
         todoListId: groceries.id,
       }),
       items.create({
         title: 'Bread',
-        description: 'Sourdough',
         completed: true,
         todoListId: groceries.id,
       }),
@@ -46,12 +44,10 @@ async function seed(): Promise<void> {
     await items.save([
       items.create({
         title: 'Review NestJS modules',
-        description: 'Providers and dependency injection',
         todoListId: interview.id,
       }),
       items.create({
         title: 'Practice TypeORM',
-        description: 'Relations and soft delete',
         todoListId: interview.id,
       }),
     ]);

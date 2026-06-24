@@ -11,3 +11,8 @@ export interface RemoteTodoItemDraft {
   title: string;
   completed: boolean;
 }
+
+export interface RemoteTodoItemPatch {
+  title: string;
+  completed: boolean;
+}

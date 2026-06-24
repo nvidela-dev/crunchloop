@@ -79,17 +79,71 @@ lint: ## Lint the TypeScript projects (api + frontend)
 	$(COMPOSE) run --rm --no-deps api npm run lint
 	$(COMPOSE) run --rm --no-deps frontend npm run lint
 
-.PHONY: functional-test
-functional-test: ## Reset (scheduler off) + seed + run the black-box curl suite
-	$(MAKE) clean
-	SYNC_CRON_ENABLED=false $(COMPOSE) up -d --build
-	@echo "waiting for services..."
+.PHONY: wait-backend
+wait-backend: ## Wait until the local API and external API answer HTTP 200
+	@echo "waiting for backend services..."
 	@for i in $$(seq 1 90); do \
 		la=$$(curl -s -o /dev/null -w '%{http_code}' http://localhost:$${API_PORT:-3000}/api/todolists 2>/dev/null); \
 		le=$$(curl -s -o /dev/null -w '%{http_code}' http://localhost:$${EXTERNAL_API_PORT:-4000}/todolists 2>/dev/null); \
-		if [ "$$la" = "200" ] && [ "$$le" = "200" ]; then break; fi; sleep 2; done
+		echo "attempt=$$i api=$$la external=$$le"; \
+		if [ "$$la" = "200" ] && [ "$$le" = "200" ]; then exit 0; fi; \
+		sleep 2; \
+	done; \
+	echo "backend services did not become ready"; \
+	exit 1
+
+.PHONY: verify-reset
+verify-reset: ## Reset volumes and start api + external-api with scheduler disabled
+	$(MAKE) clean
+	SYNC_CRON_ENABLED=false $(COMPOSE) up -d --build postgres api external-api
+	$(MAKE) wait-backend
+
+.PHONY: verify-quality
+verify-quality: ## Run backend tests, build, lint, prettier, and whitespace checks
+	$(MAKE) verify-reset
+	$(COMPOSE) exec -T api npm test -- --runInBand
+	$(COMPOSE) exec -T api npm run build
+	$(COMPOSE) exec -T api npm run lint -- --max-warnings=0
+	$(COMPOSE) exec -T api npx prettier --check "src/**/*.ts"
+	git diff --check
+
+.PHONY: functional-test
+functional-test: ## Reset backend stack + seed + run the black-box curl suite
+	$(MAKE) verify-reset
 	$(MAKE) seed
 	bash scripts/functional-test.sh
+
+.PHONY: verify-manual-sync
+verify-manual-sync: ## Reset + seed + run manual sync smoke checks
+	$(MAKE) verify-reset
+	$(MAKE) seed
+	bash scripts/manual-sync-smoke.sh
+
+.PHONY: verify-endpoints
+verify-endpoints: ## Reset + seed + smoke-test local/external CRUD endpoints
+	$(MAKE) verify-reset
+	$(MAKE) seed
+	bash scripts/endpoint-smoke.sh
+
+.PHONY: verify-schema
+verify-schema: ## Reset + seed + assert todo_item has no local description column
+	$(MAKE) verify-reset
+	$(MAKE) seed
+	@actual=$$($(COMPOSE) exec -T postgres psql -U postgres -d nestjs_db -tA -c "SELECT column_name FROM information_schema.columns WHERE table_name='todo_item' ORDER BY ordinal_position;" | paste -sd, -); \
+	expected='id,title,completed,todoListId,externalId,syncStatus,createdAt,updatedAt,deletedAt'; \
+	echo "todo_item columns: $$actual"; \
+	if [ "$$actual" != "$$expected" ]; then \
+		echo "expected columns: $$expected"; \
+		exit 1; \
+	fi
+
+.PHONY: verify-backend
+verify-backend: ## Run the full backend sync verification suite
+	$(MAKE) verify-quality
+	$(MAKE) functional-test
+	$(MAKE) verify-manual-sync
+	$(MAKE) verify-endpoints
+	$(MAKE) verify-schema
 
 # --- Seeding ---------------------------------------------------------------
 

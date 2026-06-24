@@ -7,10 +7,6 @@ export class UpdateTodoItemDto {
   @IsNotEmpty()
   title: string;
 
-  @ApiProperty({ example: 'Read the providers, modules and DI sections' })
-  @IsString()
-  description: string;
-
   @ApiProperty({ example: true })
   @IsBoolean()
   completed: boolean;

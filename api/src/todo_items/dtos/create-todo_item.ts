@@ -6,8 +6,4 @@ export class CreateTodoItemDto {
   @IsString()
   @IsNotEmpty()
   title: string;
-
-  @ApiProperty({ example: 'Read the providers and modules sections' })
-  @IsString()
-  description: string;
 }

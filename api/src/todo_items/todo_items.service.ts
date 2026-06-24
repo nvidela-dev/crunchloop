@@ -1,16 +1,19 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TodoItem } from './todo_item.entity';
 import { CreateTodoItemDto } from './dtos/create-todo_item';
 import { UpdateTodoItemDto } from './dtos/update-todo_item';
 import { SyncStatus } from '../sync/sync-status.enum';
+import { TodoList } from '../todo_lists/todo_list.entity';
 
 @Injectable()
 export class TodoItemsService {
   constructor(
     @InjectRepository(TodoItem)
     private readonly todoItemRepository: Repository<TodoItem>,
+    @InjectRepository(TodoList)
+    private readonly todoListRepository: Repository<TodoList>,
   ) {}
 
   async all(todoListId: number): Promise<TodoItem[]> {
@@ -22,9 +25,15 @@ export class TodoItemsService {
   }
 
   async create(todoListId: number, dto: CreateTodoItemDto): Promise<TodoItem> {
+    const todoList = await this.todoListRepository.findOneBy({
+      id: todoListId,
+    });
+    if (todoList === null) {
+      throw new NotFoundException(`TodoList ${todoListId} not found`);
+    }
+
     const todoItem = this.todoItemRepository.create({
       title: dto.title,
-      description: dto.description,
       todoListId,
     });
     return await this.todoItemRepository.save(todoItem);
