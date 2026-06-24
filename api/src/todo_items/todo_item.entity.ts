@@ -22,10 +22,6 @@ export class TodoItem {
   @Column()
   title: string;
 
-  @ApiProperty({ example: 'Read the providers and modules sections' })
-  @Column()
-  description: string;
-
   @ApiProperty({ example: false })
   @Column({ default: false })
   completed: boolean;

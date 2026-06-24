@@ -132,13 +132,25 @@ function makeItem(partial: Partial<TodoItem>): TodoItem {
 function remoteList(
   partial: Partial<RemoteTodoList> & Pick<RemoteTodoList, 'externalId'>,
 ): RemoteTodoList {
-  return { sourceId: null, name: 'list', updatedAt: OLD, items: [], ...partial };
+  return {
+    sourceId: null,
+    name: 'list',
+    updatedAt: OLD,
+    items: [],
+    ...partial,
+  };
 }
 
 function remoteItem(
   partial: Partial<RemoteTodoItem> & Pick<RemoteTodoItem, 'externalId'>,
 ): RemoteTodoItem {
-  return { sourceId: null, title: 'item', completed: false, updatedAt: OLD, ...partial };
+  return {
+    sourceId: null,
+    title: 'item',
+    completed: false,
+    updatedAt: OLD,
+    ...partial,
+  };
 }
 
 function repositoryMock(find: jest.Mock): Record<string, jest.Mock> {
@@ -177,7 +189,11 @@ async function buildService(
 describe('SyncService', () => {
   it('pushes a local-only list through the gateway and marks it synced', async () => {
     const gateway = new FakeRemoteTodoGateway();
-    const item = makeItem({ id: 2, title: 'Buy milk', syncStatus: SyncStatus.Pending });
+    const item = makeItem({
+      id: 2,
+      title: 'Buy milk',
+      syncStatus: SyncStatus.Pending,
+    });
     const list = makeList({
       id: 1,
       name: 'Groceries',
@@ -196,18 +212,28 @@ describe('SyncService', () => {
     expect(item.syncStatus).toBe(SyncStatus.Synced);
   });
 
-  it('flags a local item as unsynced when the connector cannot create it', async () => {
+  it('flags a local item as pending remote create when the connector cannot create it', async () => {
     const gateway = new FakeRemoteTodoGateway();
     gateway.remotes = [remoteList({ externalId: 'R1', name: 'Groceries' })];
-    const newItem = makeItem({ id: 5, externalId: null, syncStatus: SyncStatus.Pending });
-    const list = makeList({ id: 1, externalId: 'R1', name: 'Groceries', items: [newItem] });
+    const newItem = makeItem({
+      id: 5,
+      externalId: null,
+      syncStatus: SyncStatus.Pending,
+    });
+    const list = makeList({
+      id: 1,
+      externalId: 'R1',
+      name: 'Groceries',
+      items: [newItem],
+    });
 
     const { service } = await buildService(gateway, [list]);
     const summary = await service.run();
 
     expect(summary.unsynced).toBe(1);
+    expect(summary.pendingRemoteCreates).toBe(1);
     expect(summary.failed).toEqual([]);
-    expect(newItem.syncStatus).toBe(SyncStatus.Unsynced);
+    expect(newItem.syncStatus).toBe(SyncStatus.PendingRemoteCreate);
   });
 
   it('adopts a source-id match by backfilling external ids', async () => {
@@ -221,7 +247,12 @@ describe('SyncService', () => {
       }),
     ];
     const item = makeItem({ id: 2 });
-    const list = makeList({ id: 1, externalId: null, name: 'Groceries', items: [item] });
+    const list = makeList({
+      id: 1,
+      externalId: null,
+      name: 'Groceries',
+      items: [item],
+    });
 
     const { service } = await buildService(gateway, [list]);
     const summary = await service.run();
@@ -238,7 +269,14 @@ describe('SyncService', () => {
       remoteList({
         externalId: 'R1',
         name: 'Groceries',
-        items: [remoteItem({ externalId: 'RI1', title: 'old', completed: false, updatedAt: OLD })],
+        items: [
+          remoteItem({
+            externalId: 'RI1',
+            title: 'old',
+            completed: false,
+            updatedAt: OLD,
+          }),
+        ],
       }),
     ];
     const item = makeItem({
@@ -249,13 +287,21 @@ describe('SyncService', () => {
       updatedAt: NEW,
       syncStatus: SyncStatus.Pending,
     });
-    const list = makeList({ id: 1, externalId: 'R1', name: 'Groceries', items: [item] });
+    const list = makeList({
+      id: 1,
+      externalId: 'R1',
+      name: 'Groceries',
+      items: [item],
+    });
 
     const { service } = await buildService(gateway, [list]);
     const summary = await service.run();
 
     expect(gateway.updatedItems).toHaveLength(1);
-    expect(gateway.updatedItems[0].patch).toEqual({ title: 'new title', completed: true });
+    expect(gateway.updatedItems[0].patch).toEqual({
+      title: 'new title',
+      completed: true,
+    });
     expect(item.syncStatus).toBe(SyncStatus.Synced);
     expect(summary.updated).toBe(1);
   });
@@ -266,7 +312,14 @@ describe('SyncService', () => {
       remoteList({
         externalId: 'R1',
         name: 'Groceries',
-        items: [remoteItem({ externalId: 'RI1', title: 'remote new', completed: true, updatedAt: NEW })],
+        items: [
+          remoteItem({
+            externalId: 'RI1',
+            title: 'remote new',
+            completed: true,
+            updatedAt: NEW,
+          }),
+        ],
       }),
     ];
     const item = makeItem({
@@ -276,7 +329,12 @@ describe('SyncService', () => {
       completed: false,
       updatedAt: OLD,
     });
-    const list = makeList({ id: 1, externalId: 'R1', name: 'Groceries', items: [item] });
+    const list = makeList({
+      id: 1,
+      externalId: 'R1',
+      name: 'Groceries',
+      items: [item],
+    });
 
     const { service } = await buildService(gateway, [list]);
     const summary = await service.run();
@@ -315,7 +373,12 @@ describe('SyncService', () => {
         items: [remoteItem({ externalId: 'RI9', title: 'from remote' })],
       }),
     ];
-    const list = makeList({ id: 1, externalId: 'R1', name: 'Groceries', items: [] });
+    const list = makeList({
+      id: 1,
+      externalId: 'R1',
+      name: 'Groceries',
+      items: [],
+    });
 
     const { service, itemRepo } = await buildService(gateway, [list]);
     const summary = await service.run();

@@ -10,7 +10,9 @@ Postgres via TypeORM.
 ## Data model
 
 - **TodoList** — `id`, `name`, and a one-to-many `items` relation.
-- **TodoItem** — `id`, `title`, `description`, `completed`, `todoListId`.
+- **TodoItem** — `id`, `title`, `completed`, `todoListId`.
+  The external API's item `description` maps to this local `title`; there is no
+  separate local item description.
   Items belong to a list via a `ManyToOne` relation with `onDelete: CASCADE`,
   so deleting a list removes its items.
 
@@ -44,8 +46,10 @@ make test        # run the unit tests below
 
 The API listens on `http://localhost:3000` (Swagger at `/api`). Configuration is
 read from environment variables — `PORT`, `DB_HOST`, `DB_PORT`, `DB_USERNAME`,
-`DB_PASSWORD`, `DB_DATABASE` — which the compose file wires to the `postgres`
-service.
+`DB_PASSWORD`, `DB_DATABASE`, `EXTERNAL_API_URL`, `EXTERNAL_API_TIMEOUT_MS`,
+`EXTERNAL_API_RETRY_ATTEMPTS`, `EXTERNAL_API_RETRY_BASE_DELAY_MS`, and
+`SYNC_CRON_ENABLED` — which the compose file wires to the `postgres` and
+`external-api` services.
 
 ### Standalone (host Node)
 

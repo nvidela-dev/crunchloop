@@ -38,7 +38,7 @@ ok "POST list {} -> 400"          400 "$(code -X POST $API/api/todolists -H 'con
 ok "POST list {name:123} -> 400"  400 "$(code -X POST $API/api/todolists -H 'content-type: application/json' -d '{"name":123}')"
 ok "POST list valid -> 201"       201 "$(code -X POST $API/api/todolists -H 'content-type: application/json' -d '{"name":"Functest"}')"
 FID=$(lfield Functest id)
-ok "POST item missing title -> 400" 400 "$(code -X POST $API/api/todolists/$FID/items -H 'content-type: application/json' -d '{"description":"x"}')"
+ok "POST item missing title -> 400" 400 "$(code -X POST $API/api/todolists/$FID/items -H 'content-type: application/json' -d '{}')"
 curl -s -o /dev/null -X DELETE $API/api/todolists/$FID
 
 echo "### 2) Sync convergence (pull remote-only + push local-only)"
@@ -58,10 +58,10 @@ ok "re-sync pulled=0 pushed=0 updated=0 deleted=0" "0 0 0 0" "$(echo "$S2" | pyt
 
 echo "### 4) Status flagging: new item on a synced list"
 GID=$(lfield "Groceries (local)" id)
-NID=$(curl -s -X POST $API/api/todolists/$GID/items -H 'content-type: application/json' -d '{"title":"new","description":"z"}' | J 'json.load(sys.stdin)["id"]')
+NID=$(curl -s -X POST $API/api/todolists/$GID/items -H 'content-type: application/json' -d '{"title":"new"}' | J 'json.load(sys.stdin)["id"]')
 ok "created as pending" pending "$(psql "SELECT \"syncStatus\" FROM todo_item WHERE id=$NID")"
 sync >/dev/null
-ok "flagged unsynced (placeholder)" unsynced "$(psql "SELECT \"syncStatus\" FROM todo_item WHERE id=$NID")"
+ok "flagged pending_remote_create (placeholder)" pending_remote_create "$(psql "SELECT \"syncStatus\" FROM todo_item WHERE id=$NID")"
 
 echo "### 5) Update local -> remote (last-write-wins)"
 GEXT=$(lfield "Groceries (local)" externalId)
@@ -74,7 +74,7 @@ ok "remote list name updated" "Groceries EDITED" "$(python3 -c "import json;d=js
 
 IID=$(curl -s $API/api/todolists/$GID/items | J 'next(i["id"] for i in json.load(sys.stdin) if i["externalId"])')
 IEXT=$(curl -s $API/api/todolists/$GID/items | python3 -c "import sys,json;print(next(i['externalId'] for i in json.load(sys.stdin) if i['id']==$IID))")
-curl -s -o /dev/null -X PUT $API/api/todolists/$GID/items/$IID -H 'content-type: application/json' -d '{"title":"Milk EDITED","description":"x","completed":true}'
+curl -s -o /dev/null -X PUT $API/api/todolists/$GID/items/$IID -H 'content-type: application/json' -d '{"title":"Milk EDITED","completed":true}'
 sync >/dev/null
 extget
 ok "remote item reflects local edit" "Milk EDITED" "$(python3 -c "import json;d=json.load(open('/tmp/ext.json'));print(next(i['description'] for l in d if l['id']=='$GEXT' for i in l['items'] if i['id']=='$IEXT'))")"

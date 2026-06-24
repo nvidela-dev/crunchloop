@@ -5,7 +5,9 @@ import {
   toListPayload,
 } from './external-todo.wire';
 
-function wireItem(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function wireItem(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     id: 'I1',
     source_id: 'src-i1',
@@ -17,7 +19,9 @@ function wireItem(overrides: Record<string, unknown> = {}): Record<string, unkno
   };
 }
 
-function wireList(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function wireList(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     id: 'L1',
     source_id: 'src-1',
@@ -48,8 +52,12 @@ describe('external-todo.wire', () => {
     });
 
     it('coerces a numeric completed flag to a boolean', () => {
-      const one = parseRemoteList(wireList({ items: [wireItem({ completed: 1 })] }));
-      const zero = parseRemoteList(wireList({ items: [wireItem({ completed: 0 })] }));
+      const one = parseRemoteList(
+        wireList({ items: [wireItem({ completed: 1 })] }),
+      );
+      const zero = parseRemoteList(
+        wireList({ items: [wireItem({ completed: 0 })] }),
+      );
 
       expect(one.items[0].completed).toBe(true);
       expect(zero.items[0].completed).toBe(false);
@@ -71,7 +79,9 @@ describe('external-todo.wire', () => {
     });
 
     it('rejects an invalid date', () => {
-      expect(() => parseRemoteList(wireList({ updated_at: 'not-a-date' }))).toThrow();
+      expect(() =>
+        parseRemoteList(wireList({ updated_at: 'not-a-date' })),
+      ).toThrow();
     });
 
     it('rejects when items is not an array', () => {

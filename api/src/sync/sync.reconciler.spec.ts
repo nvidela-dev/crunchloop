@@ -35,13 +35,25 @@ function makeItem(partial: Partial<TodoItem>): TodoItem {
 function remoteList(
   partial: Partial<RemoteTodoList> & Pick<RemoteTodoList, 'externalId'>,
 ): RemoteTodoList {
-  return { sourceId: null, name: 'list', updatedAt: OLD, items: [], ...partial };
+  return {
+    sourceId: null,
+    name: 'list',
+    updatedAt: OLD,
+    items: [],
+    ...partial,
+  };
 }
 
 function remoteItem(
   partial: Partial<RemoteTodoItem> & Pick<RemoteTodoItem, 'externalId'>,
 ): RemoteTodoItem {
-  return { sourceId: null, title: 'item', completed: false, updatedAt: OLD, ...partial };
+  return {
+    sourceId: null,
+    title: 'item',
+    completed: false,
+    updatedAt: OLD,
+    ...partial,
+  };
 }
 
 describe('SyncReconciler', () => {
@@ -74,29 +86,56 @@ describe('SyncReconciler', () => {
 
     const plan = reconciler.reconcile([local], [remote]);
 
-    expect(plan.createRemote.items).toEqual([{ listExternalId: 'R1', item: newItem }]);
-    expect(plan.createLocal.items).toEqual([{ list: local, remote: remoteOnly }]);
+    expect(plan.createRemote.items).toEqual([
+      { listExternalId: 'R1', item: newItem },
+    ]);
+    expect(plan.createLocal.items).toEqual([
+      { list: local, remote: remoteOnly },
+    ]);
   });
 
   describe('last-write-wins updates', () => {
     it('pushes when the local list is newer', () => {
-      const local = makeList({ id: 1, externalId: 'R1', name: 'B', updatedAt: NEW });
-      const remote = remoteList({ externalId: 'R1', name: 'A', updatedAt: OLD });
+      const local = makeList({
+        id: 1,
+        externalId: 'R1',
+        name: 'B',
+        updatedAt: NEW,
+      });
+      const remote = remoteList({
+        externalId: 'R1',
+        name: 'A',
+        updatedAt: OLD,
+      });
       const plan = reconciler.reconcile([local], [remote]);
       expect(plan.updateRemote.lists).toEqual([local]);
       expect(plan.updateLocal.lists).toEqual([]);
     });
 
     it('pulls when the remote list is newer', () => {
-      const local = makeList({ id: 1, externalId: 'R1', name: 'A', updatedAt: OLD });
-      const remote = remoteList({ externalId: 'R1', name: 'C', updatedAt: NEW });
+      const local = makeList({
+        id: 1,
+        externalId: 'R1',
+        name: 'A',
+        updatedAt: OLD,
+      });
+      const remote = remoteList({
+        externalId: 'R1',
+        name: 'C',
+        updatedAt: NEW,
+      });
       const plan = reconciler.reconcile([local], [remote]);
       expect(plan.updateLocal.lists).toEqual([{ local, remote }]);
       expect(plan.updateRemote.lists).toEqual([]);
     });
 
     it('pushes when a local item is newer', () => {
-      const item = makeItem({ id: 5, externalId: 'RI1', title: 'B', updatedAt: NEW });
+      const item = makeItem({
+        id: 5,
+        externalId: 'RI1',
+        title: 'B',
+        updatedAt: NEW,
+      });
       const local = makeList({ id: 1, externalId: 'R1', items: [item] });
       const remote = remoteList({
         externalId: 'R1',
@@ -107,9 +146,18 @@ describe('SyncReconciler', () => {
     });
 
     it('pulls when a remote item is newer', () => {
-      const item = makeItem({ id: 5, externalId: 'RI1', title: 'A', updatedAt: OLD });
+      const item = makeItem({
+        id: 5,
+        externalId: 'RI1',
+        title: 'A',
+        updatedAt: OLD,
+      });
       const local = makeList({ id: 1, externalId: 'R1', items: [item] });
-      const incoming = remoteItem({ externalId: 'RI1', title: 'C', updatedAt: NEW });
+      const incoming = remoteItem({
+        externalId: 'RI1',
+        title: 'C',
+        updatedAt: NEW,
+      });
       const remote = remoteList({ externalId: 'R1', items: [incoming] });
       const plan = reconciler.reconcile([local], [remote]);
       expect(plan.updateLocal.items).toEqual([{ item, remote: incoming }]);
@@ -132,14 +180,22 @@ describe('SyncReconciler', () => {
 
   describe('deletes', () => {
     it('propagates a local soft-delete with an externalId to the remote', () => {
-      const local = makeList({ id: 1, externalId: 'R1', deletedAt: new Date() });
+      const local = makeList({
+        id: 1,
+        externalId: 'R1',
+        deletedAt: new Date(),
+      });
       const remote = remoteList({ externalId: 'R1' });
       const plan = reconciler.reconcile([local], [remote]);
       expect(plan.deleteRemote.lists).toEqual([local]);
     });
 
     it('purges a soft-deleted local list that was never synced', () => {
-      const local = makeList({ id: 1, externalId: null, deletedAt: new Date() });
+      const local = makeList({
+        id: 1,
+        externalId: null,
+        deletedAt: new Date(),
+      });
       const plan = reconciler.reconcile([local], []);
       expect(plan.removeLocal.lists).toEqual([local]);
     });

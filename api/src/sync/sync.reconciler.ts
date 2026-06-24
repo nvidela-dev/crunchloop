@@ -50,7 +50,13 @@ export class SyncReconciler {
     const matched = new Set<string>();
 
     for (const local of locals) {
-      this.reconcileList(local, remoteByExternalId, remoteBySourceId, matched, plan);
+      this.reconcileList(
+        local,
+        remoteByExternalId,
+        remoteBySourceId,
+        matched,
+        plan,
+      );
     }
     for (const remote of remotes) {
       if (!matched.has(remote.externalId)) {
@@ -69,7 +75,9 @@ export class SyncReconciler {
   ): void {
     if (local.deletedAt !== null) {
       const remote =
-        local.externalId !== null ? byExternalId.get(local.externalId) : undefined;
+        local.externalId !== null
+          ? byExternalId.get(local.externalId)
+          : undefined;
       if (remote) {
         matched.add(remote.externalId);
         plan.deleteRemote.lists.push(local);
@@ -126,7 +134,14 @@ export class SyncReconciler {
     const matched = new Set<string>();
 
     for (const item of local.items) {
-      this.reconcileItem(item, remote.externalId, byExternalId, bySourceId, matched, plan);
+      this.reconcileItem(
+        item,
+        remote.externalId,
+        byExternalId,
+        bySourceId,
+        matched,
+        plan,
+      );
     }
     for (const remoteItem of remote.items) {
       if (!matched.has(remoteItem.externalId)) {
@@ -145,7 +160,9 @@ export class SyncReconciler {
   ): void {
     if (item.deletedAt !== null) {
       const remote =
-        item.externalId !== null ? byExternalId.get(item.externalId) : undefined;
+        item.externalId !== null
+          ? byExternalId.get(item.externalId)
+          : undefined;
       if (remote) {
         matched.add(remote.externalId);
         plan.deleteRemote.items.push({ listExternalId, item });

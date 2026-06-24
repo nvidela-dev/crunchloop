@@ -25,10 +25,14 @@ export interface SyncSummary {
   updated: number;
   deleted: number;
   unsynced: number;
+  pendingRemoteCreates: number;
+  durationMs: number;
   failed: string[];
 }
 
-function emptySummary(failed: string[]): SyncSummary {
+type SyncSummaryWithoutDuration = Omit<SyncSummary, 'durationMs'>;
+
+function emptySummary(failed: string[]): SyncSummaryWithoutDuration {
   return {
     pulled: 0,
     pushed: 0,
@@ -36,6 +40,7 @@ function emptySummary(failed: string[]): SyncSummary {
     updated: 0,
     deleted: 0,
     unsynced: 0,
+    pendingRemoteCreates: 0,
     failed,
   };
 }
@@ -64,23 +69,25 @@ export class SyncService {
     this.logger.log(
       `sync: pulled=${s.pulled} pushed=${s.pushed} adopted=${s.adopted} ` +
         `updated=${s.updated} deleted=${s.deleted} unsynced=${s.unsynced} ` +
-        `failed=${s.failed.length}`,
+        `pendingRemoteCreates=${s.pendingRemoteCreates} ` +
+        `failed=${s.failed.length} durationMs=${s.durationMs}`,
     );
   }
 
   async run(): Promise<SyncSummary> {
+    const startedAt = Date.now();
     if (this.running) {
-      return emptySummary(['already running']);
+      return withDuration(emptySummary(['already running']), startedAt);
     }
     this.running = true;
     try {
-      return await this.reconcileOnce();
+      return await this.reconcileOnce(startedAt);
     } finally {
       this.running = false;
     }
   }
 
-  private async reconcileOnce(): Promise<SyncSummary> {
+  private async reconcileOnce(startedAt: number): Promise<SyncSummary> {
     const locals = await this.todoListRepository.find({
       relations: { items: true },
       withDeleted: true,
@@ -90,7 +97,7 @@ export class SyncService {
     try {
       remotes = await this.remote.fetchAll();
     } catch (error) {
-      return emptySummary([describe(error)]);
+      return withDuration(emptySummary([describe(error)]), startedAt);
     }
 
     const plan = this.reconciler.reconcile(locals, remotes);
@@ -98,13 +105,28 @@ export class SyncService {
 
     const pulled = await this.applyCreateLocal(plan);
     const pushed = await this.applyPushLists(plan.createRemote.lists, failed);
-    const unsynced = await this.applyPushItems(plan.createRemote.items, failed);
+    const pendingItems = await this.applyPushItems(
+      plan.createRemote.items,
+      failed,
+    );
     const adopted = await this.applyAdopt(plan, failed);
     const updated = await this.applyUpdates(plan, failed);
     const deleted = await this.applyDeletes(plan, failed);
     await this.applyMarkSynced(plan);
 
-    return { pulled, pushed, adopted, updated, deleted, unsynced, failed };
+    return withDuration(
+      {
+        pulled,
+        pushed,
+        adopted,
+        updated,
+        deleted,
+        unsynced: pendingItems.unsynced,
+        pendingRemoteCreates: pendingItems.pendingRemoteCreates,
+        failed,
+      },
+      startedAt,
+    );
   }
 
   private async applyCreateLocal(plan: SyncPlan): Promise<number> {
@@ -128,7 +150,6 @@ export class SyncService {
     const items = targets.map(({ list, remote }) =>
       this.todoItemRepository.create({
         title: remote.title,
-        description: '',
         completed: remote.completed,
         todoListId: list.id,
         externalId: remote.externalId,
@@ -166,8 +187,9 @@ export class SyncService {
   private async applyPushItems(
     targets: RemoteItemTarget[],
     failed: string[],
-  ): Promise<number> {
+  ): Promise<{ unsynced: number; pendingRemoteCreates: number }> {
     let unsynced = 0;
+    let pendingRemoteCreates = 0;
     const touched: TodoItem[] = [];
     for (const { listExternalId, item } of targets) {
       const previousStatus = item.syncStatus;
@@ -180,8 +202,14 @@ export class SyncService {
         item.externalId = remote.externalId;
         item.syncStatus = SyncStatus.Synced;
       } catch (error) {
-        item.syncStatus = SyncStatus.Unsynced;
+        item.syncStatus =
+          error instanceof UnsupportedRemoteOperationError
+            ? SyncStatus.PendingRemoteCreate
+            : SyncStatus.Unsynced;
         unsynced += 1;
+        if (error instanceof UnsupportedRemoteOperationError) {
+          pendingRemoteCreates += 1;
+        }
         if (!(error instanceof UnsupportedRemoteOperationError)) {
           failed.push(`push item ${item.id}: ${describe(error)}`);
         }
@@ -191,7 +219,7 @@ export class SyncService {
       }
     }
     await this.todoItemRepository.save(touched);
-    return unsynced;
+    return { unsynced, pendingRemoteCreates };
   }
 
   private async applyAdopt(plan: SyncPlan, failed: string[]): Promise<number> {
@@ -212,8 +240,10 @@ export class SyncService {
     await this.todoItemRepository.save(items);
     return adopted + items.length;
   }
-
-  private async applyUpdates(plan: SyncPlan, failed: string[]): Promise<number> {
+  private async applyUpdates(
+    plan: SyncPlan,
+    failed: string[],
+  ): Promise<number> {
     let updated = 0;
     updated += await this.pushListUpdates(plan.updateRemote.lists, failed);
     updated += await this.pushItemUpdates(plan.updateRemote.items, failed);
@@ -288,7 +318,10 @@ export class SyncService {
     return items.length;
   }
 
-  private async applyDeletes(plan: SyncPlan, failed: string[]): Promise<number> {
+  private async applyDeletes(
+    plan: SyncPlan,
+    failed: string[],
+  ): Promise<number> {
     let deleted = 0;
     deleted += await this.deleteRemoteItems(plan.deleteRemote.items, failed);
     deleted += await this.deleteRemoteLists(plan.deleteRemote.lists, failed);
@@ -377,7 +410,7 @@ export class SyncService {
         item.externalId = match.externalId;
         item.syncStatus = SyncStatus.Synced;
       } else {
-        item.syncStatus = SyncStatus.Unsynced;
+        item.syncStatus = SyncStatus.PendingRemoteCreate;
       }
     }
     await this.todoItemRepository.save(local.items);
@@ -398,4 +431,11 @@ function indexRemoteItemsBySourceId(
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function withDuration(
+  summary: SyncSummaryWithoutDuration,
+  startedAt: number,
+): SyncSummary {
+  return { ...summary, durationMs: Date.now() - startedAt };
 }

@@ -5,11 +5,13 @@ import { INestApplication } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { TodoItem } from './todo_item.entity';
 import { SyncStatus } from '../sync/sync-status.enum';
+import { TodoList } from '../todo_lists/todo_list.entity';
 
 describe('TodoItemsController', () => {
   let app: INestApplication;
   let todoItemsController: TodoItemsController;
   let todoItemRepositoryMock: jest.Mocked<Record<string, jest.Mock>>;
+  let todoListRepositoryMock: jest.Mocked<Record<string, jest.Mock>>;
 
   beforeEach(async () => {
     todoItemRepositoryMock = {
@@ -20,6 +22,9 @@ describe('TodoItemsController', () => {
       softDelete: jest.fn(),
       create: jest.fn(),
     };
+    todoListRepositoryMock = {
+      findOneBy: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [TodoItemsController],
@@ -28,6 +33,10 @@ describe('TodoItemsController', () => {
         {
           provide: getRepositoryToken(TodoItem),
           useValue: todoItemRepositoryMock,
+        },
+        {
+          provide: getRepositoryToken(TodoList),
+          useValue: todoListRepositoryMock,
         },
       ],
     }).compile();
@@ -48,14 +57,12 @@ describe('TodoItemsController', () => {
         {
           id: 1,
           title: 'First',
-          description: '',
           completed: false,
           todoListId: 1,
         },
         {
           id: 2,
           title: 'Second',
-          description: '',
           completed: true,
           todoListId: 1,
         },
@@ -77,7 +84,6 @@ describe('TodoItemsController', () => {
       const mockItem = {
         id: 1,
         title: 'First',
-        description: '',
         completed: false,
         todoListId: 1,
       };
@@ -95,15 +101,15 @@ describe('TodoItemsController', () => {
 
   describe('create', () => {
     it('should create a new item in a todo list', async () => {
-      const createDto = { title: 'New', description: 'Desc' };
+      const createDto = { title: 'New' };
       const createdItem = {
         id: 1,
         title: 'New',
-        description: 'Desc',
         completed: false,
         todoListId: 1,
       };
 
+      todoListRepositoryMock.findOneBy.mockResolvedValue({ id: 1 });
       todoItemRepositoryMock.create.mockReturnValue(createdItem);
       todoItemRepositoryMock.save.mockResolvedValue(createdItem);
 
@@ -112,19 +118,26 @@ describe('TodoItemsController', () => {
       expect(result).toEqual(createdItem);
       expect(todoItemRepositoryMock.create).toHaveBeenCalledWith({
         title: 'New',
-        description: 'Desc',
         todoListId: 1,
       });
+    });
+
+    it('throws a not found error when creating an item for a missing list', async () => {
+      todoListRepositoryMock.findOneBy.mockResolvedValue(null);
+
+      await expect(
+        todoItemsController.create(404, { title: 'New' }),
+      ).rejects.toThrow('TodoList 404 not found');
+      expect(todoItemRepositoryMock.create).not.toHaveBeenCalled();
     });
   });
 
   describe('update', () => {
     it('should update an existing item (including completed)', async () => {
-      const updateDto = { title: 'Done', description: 'Desc', completed: true };
+      const updateDto = { title: 'Done', completed: true };
       const updatedItem = {
         id: 1,
         title: 'Done',
-        description: 'Desc',
         completed: true,
         todoListId: 1,
       };

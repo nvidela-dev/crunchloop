@@ -1,7 +1,9 @@
 import { ExternalTodoGateway } from './external-todo.gateway';
 import { UnsupportedRemoteOperationError } from './unsupported-remote-operation.error';
 
-function wireList(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function wireList(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     id: 'L1',
     source_id: 'src-1',
@@ -13,7 +15,9 @@ function wireList(overrides: Record<string, unknown> = {}): Record<string, unkno
   };
 }
 
-function wireItem(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function wireItem(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     id: 'I1',
     source_id: 'src-i1',
@@ -27,6 +31,7 @@ function wireItem(overrides: Record<string, unknown> = {}): Record<string, unkno
 
 describe('ExternalTodoGateway', () => {
   const originalFetch = globalThis.fetch;
+  const originalRetryDelay = process.env.EXTERNAL_API_RETRY_BASE_DELAY_MS;
 
   function installFetch(
     response: Response,
@@ -40,6 +45,11 @@ describe('ExternalTodoGateway', () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    if (originalRetryDelay === undefined) {
+      delete process.env.EXTERNAL_API_RETRY_BASE_DELAY_MS;
+    } else {
+      process.env.EXTERNAL_API_RETRY_BASE_DELAY_MS = originalRetryDelay;
+    }
   });
 
   it('fetchAll parses the remote payload into domain lists', async () => {
@@ -60,6 +70,35 @@ describe('ExternalTodoGateway', () => {
     const gateway = new ExternalTodoGateway();
 
     await expect(gateway.fetchAll()).rejects.toThrow();
+  });
+
+  it('retries transient remote failures', async () => {
+    process.env.EXTERNAL_API_RETRY_BASE_DELAY_MS = '1';
+    const mock = jest
+      .fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
+      .mockResolvedValueOnce(
+        new Response('temporarily unavailable', { status: 503 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([wireList()]), { status: 200 }),
+      );
+    globalThis.fetch = mock;
+    const gateway = new ExternalTodoGateway();
+
+    const lists = await gateway.fetchAll();
+
+    expect(lists).toHaveLength(1);
+    expect(mock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry terminal client errors', async () => {
+    const mock = installFetch(new Response('bad request', { status: 400 }));
+    const gateway = new ExternalTodoGateway();
+
+    await expect(gateway.fetchAll()).rejects.toThrow(
+      'Remote GET /todolists failed with status 400',
+    );
+    expect(mock).toHaveBeenCalledTimes(1);
   });
 
   it('createList posts the mapped payload and returns the created list', async () => {
@@ -97,7 +136,9 @@ describe('ExternalTodoGateway', () => {
 
   it('updateList patches the list and returns the parsed result', async () => {
     const mock = installFetch(
-      new Response(JSON.stringify(wireList({ name: 'Renamed' })), { status: 200 }),
+      new Response(JSON.stringify(wireList({ name: 'Renamed' })), {
+        status: 200,
+      }),
     );
     const gateway = new ExternalTodoGateway();
 
@@ -122,9 +163,12 @@ describe('ExternalTodoGateway', () => {
 
   it('updateItem patches the item, mapping title -> description', async () => {
     const mock = installFetch(
-      new Response(JSON.stringify(wireItem({ description: 'done', completed: true })), {
-        status: 200,
-      }),
+      new Response(
+        JSON.stringify(wireItem({ description: 'done', completed: true })),
+        {
+          status: 200,
+        },
+      ),
     );
     const gateway = new ExternalTodoGateway();
 
@@ -148,6 +192,8 @@ describe('ExternalTodoGateway', () => {
     const gateway = new ExternalTodoGateway();
 
     await expect(gateway.deleteItem('L1', 'I1')).resolves.toBeUndefined();
-    expect(String(mock.mock.calls[0][0])).toContain('/todolists/L1/todoitems/I1');
+    expect(String(mock.mock.calls[0][0])).toContain(
+      '/todolists/L1/todoitems/I1',
+    );
   });
 });
