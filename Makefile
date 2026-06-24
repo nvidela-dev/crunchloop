@@ -79,6 +79,18 @@ lint: ## Lint the TypeScript projects (api + frontend)
 	$(COMPOSE) run --rm --no-deps api npm run lint
 	$(COMPOSE) run --rm --no-deps frontend npm run lint
 
+.PHONY: functional-test
+functional-test: ## Reset (scheduler off) + seed + run the black-box curl suite
+	$(MAKE) clean
+	SYNC_CRON_ENABLED=false $(COMPOSE) up -d --build
+	@echo "waiting for services..."
+	@for i in $$(seq 1 90); do \
+		la=$$(curl -s -o /dev/null -w '%{http_code}' http://localhost:$${API_PORT:-3000}/api/todolists 2>/dev/null); \
+		le=$$(curl -s -o /dev/null -w '%{http_code}' http://localhost:$${EXTERNAL_API_PORT:-4000}/todolists 2>/dev/null); \
+		if [ "$$la" = "200" ] && [ "$$le" = "200" ]; then break; fi; sleep 2; done
+	$(MAKE) seed
+	bash scripts/functional-test.sh
+
 # --- Seeding ---------------------------------------------------------------
 
 .PHONY: seed

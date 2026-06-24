@@ -4,6 +4,7 @@ import { TodoItemsService } from './todo_items.service';
 import { INestApplication } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { TodoItem } from './todo_item.entity';
+import { SyncStatus } from '../sync/sync-status.enum';
 
 describe('TodoItemsController', () => {
   let app: INestApplication;
@@ -137,6 +138,7 @@ describe('TodoItemsController', () => {
         id: 1,
         todoListId: 1,
         ...updateDto,
+        syncStatus: SyncStatus.Pending,
       });
     });
   });
