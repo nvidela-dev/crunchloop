@@ -47,6 +47,9 @@ API configured by `VITE_API_URL`; with Docker Compose, that defaults to
 
 Copy `.env.example` to `.env` to override local ports and sync timing.
 
+- `CORS_ORIGIN` controls which browser origin can call the local API. The
+  default is `http://localhost:5173`; use comma-separated origins if you run the
+  frontend from multiple hosts.
 - `SYNC_INTERVAL_MS` controls how often the backend synchronizes with the
   external API. The default is `60000` ms.
 - `VITE_API_POLL_INTERVAL_MS` controls how often the browser refreshes from the
